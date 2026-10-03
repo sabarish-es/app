@@ -8,8 +8,15 @@ import bcrypt from 'bcryptjs'
 let dbPromise
 async function connectToMongo() {
   if (!dbPromise) {
-    const c = new MongoClient(process.env.MONGO_URL)
-    dbPromise = c.connect().then(cl => cl.db(process.env.DB_NAME))
+    const mongoUrl = process.env.MONGODB_URI || process.env.MONGO_URL
+    const dbName = process.env.MONGODB_DB || process.env.DB_NAME || 'besant_studenthub'
+
+    if (!mongoUrl) {
+      throw new Error('MongoDB is connected in Vercel, but no MongoDB URI is available to the app. Add MONGODB_URI or MONGO_URL in project variables.')
+    }
+
+    const client = new MongoClient(mongoUrl)
+    dbPromise = client.connect().then((connection) => connection.db(dbName))
   }
   return dbPromise
 }
