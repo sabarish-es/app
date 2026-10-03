@@ -8,7 +8,7 @@ import {
   ClipboardList, PlaneTakeoff, Ticket, DoorOpen, Bell, FileBarChart, PartyPopper, ScrollText,
   Settings, LogOut, QrCode, ScanLine, MapPin, CheckCircle2, XCircle, Clock, Loader2, Plus,
   Search, Eye, KeyRound, Power, Menu, Home, CalendarClock, UserRound, ChevronRight, Trash2,
-  ShieldCheck, TrendingUp, Sparkles, Camera, Copy, RefreshCw, Timer, X
+  ShieldCheck, TrendingUp, Sparkles, Camera, Copy, RefreshCw, Timer, X, Building2, Briefcase, Printer
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -115,6 +115,7 @@ function LoginScreen({ onLogin }) {
   const switchRole = (r) => {
     setRole(r)
     if (r === 'admin') { setLoginId('besanttech@2026'); setPassword('besanttech@2026') }
+    else if (r === 'trainer') { setLoginId('TR-01'); setPassword('Trainer@2026') }
     else { setLoginId('BST-PY-001'); setPassword('Bst@2026') }
   }
   const submit = async (e) => {
@@ -157,12 +158,12 @@ function LoginScreen({ onLogin }) {
             <h2 className="text-2xl font-bold">Welcome Back</h2>
             <p className="mb-6 text-sm text-slate-500">Sign in to your Besant StudentHub account</p>
 
-            <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-              {['admin', 'student'].map(r => (
+            <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
+              {['admin', 'trainer', 'student'].map(r => (
                 <button key={r} onClick={() => switchRole(r)}
                   className={`relative rounded-lg py-2.5 text-sm font-semibold capitalize transition ${role === r ? 'text-white' : 'text-slate-500'}`}>
                   {role === r && <motion.div layoutId="roletab" className="absolute inset-0 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 shadow" />}
-                  <span className="relative flex items-center justify-center gap-1.5">{r === 'admin' ? <ShieldCheck className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}{r}</span>
+                  <span className="relative flex items-center justify-center gap-1.5">{r === 'admin' ? <ShieldCheck className="h-4 w-4" /> : r === 'trainer' ? <UserCog className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}{r}</span>
                 </button>
               ))}
             </div>
@@ -187,6 +188,7 @@ function LoginScreen({ onLogin }) {
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
               <div className="font-semibold text-slate-600">Demo credentials</div>
               <div className="mt-1">Admin: <b>besanttech@2026</b> / <b>besanttech@2026</b></div>
+              <div>Trainer: <b>TR-01</b> / <b>Trainer@2026</b></div>
               <div>Student: <b>BST-PY-001</b> / <b>Bst@2026</b></div>
             </div>
             <p className="mt-4 text-center text-xs text-slate-400">Student registration is managed by Besant Technologies Administration.</p>
@@ -271,6 +273,8 @@ const ADMIN_NAV = [
   { key: 'courses', label: 'Courses', icon: BookOpen },
   { key: 'batches', label: 'Batches', icon: Boxes },
   { key: 'trainers', label: 'Trainers', icon: UserCog },
+  { key: 'branches', label: 'Branches', icon: Building2 },
+  { key: 'placements', label: 'Placements', icon: Briefcase },
   { key: 'schedules', label: 'Schedules', icon: CalendarDays },
   { key: 'live', label: 'Live Attendance', icon: Radio },
   { key: 'attendance', label: 'Attendance / Reports', icon: FileBarChart },
@@ -331,6 +335,8 @@ function AdminApp({ user, onLogout }) {
               {view === 'courses' && <AdminCourses />}
               {view === 'batches' && <AdminBatches />}
               {view === 'trainers' && <AdminTrainers />}
+              {view === 'branches' && <AdminBranches />}
+              {view === 'placements' && <AdminPlacements />}
               {view === 'schedules' && <AdminSchedules />}
               {view === 'live' && <AdminLive />}
               {view === 'attendance' && <AdminReports />}
@@ -604,29 +610,98 @@ function AdminBatches() {
 
 /* ---------- Trainers ---------- */
 function AdminTrainers() {
-  const [list, setList] = useState(null); const [form, setForm] = useState({ name: '', email: '', mobile: '', skills: '', courses: '' })
+  const [list, setList] = useState(null); const [branches, setBranches] = useState([])
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', skills: '', courses: '', loginId: '', password: 'Trainer@2026', branchId: '' })
   const load = () => api('/trainers').then(setList)
-  useEffect(() => { load() }, [])
-  const add = async () => { if (!form.name) return; try { await api('/trainers', 'POST', form); toast.success('Trainer added'); setForm({ name: '', email: '', mobile: '', skills: '', courses: '' }); load() } catch (e) { toast.error(e.message) } }
+  useEffect(() => { load(); api('/branches').then(setBranches) }, [])
+  const add = async () => { if (!form.name) return toast.error('Name required'); try { await api('/trainers', 'POST', form); toast.success('Trainer created with login'); setForm({ name: '', email: '', mobile: '', skills: '', courses: '', loginId: '', password: 'Trainer@2026', branchId: '' }); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete trainer?')) return; await api(`/trainers/${id}`, 'DELETE'); load() }
+  const resetPwd = async (t) => { const np = prompt('New password for ' + t.name, 'Trainer@2026'); if (!np) return; try { await api(`/trainers/${t.id}/reset-password`, 'POST', { newPassword: np }); toast.success('Password reset') } catch (e) { toast.error(e.message) } }
   return (
     <div className="space-y-4">
-      <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-3">
+      <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Name"><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="Email"><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
         <Field label="Mobile"><Input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></Field>
         <Field label="Skills"><Input value={form.skills} onChange={e => setForm({ ...form, skills: e.target.value })} placeholder="Python, SQL" /></Field>
-        <Field label="Courses"><Input value={form.courses} onChange={e => setForm({ ...form, courses: e.target.value })} /></Field>
+        <Field label="Login ID"><Input value={form.loginId} onChange={e => setForm({ ...form, loginId: e.target.value })} placeholder="auto TR-xx" /></Field>
+        <Field label="Password"><Input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></Field>
+        <Field label="Branch"><Select value={form.branchId} onValueChange={v => setForm({ ...form, branchId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent></Select></Field>
         <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Trainer</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(t => (
           <Card key={t.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6">
-            <div className="flex items-center gap-3"><Avatar className="h-10 w-10"><AvatarFallback className="bg-violet-100 text-violet-700">{initials(t.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{t.name}</div><div className="text-xs text-slate-400">{t.skills}</div></div></div>
-            <Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
+            <div className="flex items-center gap-3"><Avatar className="h-10 w-10"><AvatarFallback className="bg-violet-100 text-violet-700">{initials(t.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{t.name}</div><div className="text-xs text-slate-400">{t.skills}</div><div className="text-xs font-mono text-indigo-500">{t.loginId}</div></div></div>
+            <div className="flex gap-1"><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(t)}><KeyRound className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
           </CardContent></Card>
         ))}</div>
       )}
+    </div>
+  )
+}
+
+function AdminBranches() {
+  const [list, setList] = useState(null); const [form, setForm] = useState({ name: '', city: '', lat: '', lng: '', radius: 200 })
+  const load = () => api('/branches').then(setList); useEffect(() => { load() }, [])
+  const add = async () => { if (!form.name) return toast.error('Name required'); await api('/branches', 'POST', form); toast.success('Branch added'); setForm({ name: '', city: '', lat: '', lng: '', radius: 200 }); load() }
+  const del = async (id) => { if (!confirm('Delete branch?')) return; await api(`/branches/${id}`, 'DELETE'); load() }
+  return (
+    <div className="space-y-4">
+      <Card className="rounded-2xl"><CardContent className="grid items-end gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-6">
+        <Field label="Branch Name"><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Velachery" /></Field>
+        <Field label="City"><Input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} /></Field>
+        <Field label="Latitude"><Input type="number" value={form.lat} onChange={e => setForm({ ...form, lat: e.target.value })} /></Field>
+        <Field label="Longitude"><Input type="number" value={form.lng} onChange={e => setForm({ ...form, lng: e.target.value })} /></Field>
+        <Field label="Radius (m)"><Input type="number" value={form.radius} onChange={e => setForm({ ...form, radius: e.target.value })} /></Field>
+        <Button onClick={add} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Branch</Button>
+      </CardContent></Card>
+      {!list ? <Skeleton className="h-32 rounded-2xl" /> : list.length === 0 ? <Empty icon={Building2} title="No branches" /> : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(b => (
+          <Card key={b.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6">
+            <div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-100 text-sky-600"><Building2 className="h-5 w-5" /></div><div><div className="font-semibold text-slate-800">{b.name}</div><div className="text-xs text-slate-400">{b.city} · {b.radius}m radius</div></div></div>
+            <Button size="icon" variant="ghost" onClick={() => del(b.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
+          </CardContent></Card>
+        ))}</div>
+      )}
+    </div>
+  )
+}
+
+function AdminPlacements() {
+  const [list, setList] = useState(null); const [form, setForm] = useState({ company: '', role: '', eligibility: '', package: '', location: '', interviewDate: '' })
+  const [applicants, setApplicants] = useState(null)
+  const load = () => api('/placements').then(setList); useEffect(() => { load() }, [])
+  const add = async () => { if (!form.company || !form.role) return toast.error('Company and Role required'); await api('/placements', 'POST', form); toast.success('Placement drive added'); setForm({ company: '', role: '', eligibility: '', package: '', location: '', interviewDate: '' }); load() }
+  const del = async (id) => { if (!confirm('Delete drive?')) return; await api(`/placements/${id}`, 'DELETE'); load() }
+  const viewApps = async (p) => { const a = await api(`/placements/${p.id}/applicants`); setApplicants({ p, list: a }) }
+  return (
+    <div className="space-y-4">
+      <Card className="rounded-2xl"><CardContent className="grid items-end gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Company"><Input value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} /></Field>
+        <Field label="Job Role"><Input value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} /></Field>
+        <Field label="Package"><Input value={form.package} onChange={e => setForm({ ...form, package: e.target.value })} placeholder="5 LPA" /></Field>
+        <Field label="Eligibility"><Input value={form.eligibility} onChange={e => setForm({ ...form, eligibility: e.target.value })} /></Field>
+        <Field label="Location"><Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></Field>
+        <Field label="Interview Date"><Input type="date" value={form.interviewDate} onChange={e => setForm({ ...form, interviewDate: e.target.value })} /></Field>
+        <Button onClick={add} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Drive</Button>
+      </CardContent></Card>
+      {!list ? <Skeleton className="h-40 rounded-2xl" /> : list.length === 0 ? <Empty icon={Briefcase} title="No placement drives" /> : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(p => (
+          <Card key={p.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6">
+            <div className="flex items-start justify-between"><div><div className="font-bold text-slate-800">{p.company}</div><div className="text-sm text-indigo-600">{p.role}</div></div><Button size="icon" variant="ghost" onClick={() => del(p.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
+            <div className="mt-2 space-y-1 text-xs text-slate-500"><div>Package: {p.package}</div><div>Eligibility: {p.eligibility}</div><div>Interview: {fmtDate(p.interviewDate)}</div></div>
+            <Button size="sm" variant="outline" className="mt-3 w-full" onClick={() => viewApps(p)}><Users className="mr-1 h-4 w-4" /> Applicants ({p.applicants})</Button>
+          </CardContent></Card>
+        ))}</div>
+      )}
+      <Dialog open={!!applicants} onOpenChange={() => setApplicants(null)}>
+        <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>{applicants?.p.company} — Applicants</DialogTitle></DialogHeader>
+          <div className="max-h-80 overflow-y-auto">{applicants?.list?.length ? applicants.list.map(a => (
+            <div key={a.id} className="flex items-center justify-between border-b border-slate-100 py-2 text-sm"><div><div className="font-medium text-slate-800">{a.studentName}</div><div className="text-xs text-slate-400">{a.studentCode} · {a.batchName}</div></div><Badge variant="outline">{a.status}</Badge></div>
+          )) : <Empty icon={Users} title="No applicants yet" />}</div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -756,6 +831,13 @@ function AdminReports() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'attendance_report.csv'; a.click()
     toast.success('CSV exported')
   }
+  const exportPdf = () => {
+    if (!list?.length) return toast.error('Nothing to export')
+    const rows = list.map(r => `<tr><td>${r.date}</td><td>${r.studentName}</td><td>${r.classType} (${r.batchName})</td><td>${fmtTime(r.checkInTime)}</td><td>${fmtTime(r.checkOutTime)}</td><td>${r.status}</td></tr>`).join('')
+    const html = `<html><head><title>Attendance Report</title><style>body{font-family:system-ui,Arial;padding:24px;color:#1e293b}h1{color:#4f46e5;margin-bottom:2px}.sub{color:#64748b;margin-bottom:16px;font-size:13px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#eef2ff;text-align:left;padding:8px;border-bottom:2px solid #c7d2fe}td{padding:8px;border-bottom:1px solid #e2e8f0}</style></head><body><h1>Besant StudentHub</h1><div class="sub">Attendance Report &middot; Generated ${new Date().toLocaleString('en-IN')} &middot; ${list.length} records</div><table><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+    const w = window.open('', '_blank'); if (!w) return toast.error('Allow popups to export PDF'); w.document.write(html); w.document.close(); w.focus(); setTimeout(() => w.print(), 400)
+    toast.success('Opening print / Save as PDF')
+  }
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -763,6 +845,7 @@ function AdminReports() {
         <Select value={batchId} onValueChange={setBatchId}><SelectTrigger className="w-44"><SelectValue placeholder="Batch" /></SelectTrigger><SelectContent><SelectItem value="all">All Batches</SelectItem>{batches.map(b => <SelectItem key={b.id} value={b.id}>{b.batchId}</SelectItem>)}</SelectContent></Select>
         <Select value={status} onValueChange={setStatus}><SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{['all', 'Present', 'Late', 'Absent', 'Leave'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'All Status' : s}</SelectItem>)}</SelectContent></Select>
         <Button variant="outline" onClick={exportCsv}><FileBarChart className="mr-1 h-4 w-4" /> Export CSV</Button>
+        <Button variant="outline" onClick={exportPdf}><Printer className="mr-1 h-4 w-4" /> Export PDF</Button>
       </div>
       {!list ? <Skeleton className="h-64 rounded-2xl" /> : list.length === 0 ? <Empty icon={FileBarChart} title="No attendance records" /> : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -963,6 +1046,8 @@ function StudentApp({ user, onLogout }) {
             {view === 'profile' && <StudentProfile user={user} />}
             {view === 'slots' && <StudentSlots />}
             {view === 'leave' && <StudentLeave />}
+            {view === 'placements' && <StudentPlacements />}
+            {view === 'calendar' && <StudentCalendar />}
             {view === 'notifications' && <StudentNotifications />}
           </motion.div>
         </AnimatePresence>
@@ -1013,6 +1098,14 @@ function StudentDashboard({ user, go }) {
           </div>
         </div>
       </motion.div>
+
+      <div className="grid grid-cols-4 gap-2">
+        {[['Slots', Ticket, 'slots'], ['Leave', PlaneTakeoff, 'leave'], ['Calendar', CalendarDays, 'calendar'], ['Jobs', Briefcase, 'placements']].map(([label, Icon, key]) => (
+          <button key={key} onClick={() => go(key)} className="flex flex-col items-center gap-1 rounded-2xl border border-slate-200 bg-white py-3 text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600">
+            <Icon className="h-5 w-5" /><span className="text-[11px] font-medium">{label}</span>
+          </button>
+        ))}
+      </div>
 
       {data.current && (
         <Card className="rounded-2xl border-emerald-200 bg-emerald-50"><CardContent className="flex items-center justify-between pt-6">
@@ -1286,6 +1379,162 @@ function StudentNotifications() {
   ))}</div>
 }
 
+function StudentPlacements() {
+  const [list, setList] = useState(null)
+  const load = () => api('/placements').then(setList); useEffect(() => { load() }, [])
+  const apply = async (id) => { try { await api(`/placements/${id}/apply`, 'POST', {}); toast.success('Applied successfully'); load() } catch (e) { toast.error(e.message) } }
+  if (!list) return <Skeleton className="h-64 rounded-2xl" />
+  if (!list.length) return <Empty icon={Briefcase} title="No placement opportunities yet" />
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-bold text-slate-900">Placement Opportunities</h2>
+      {list.map(p => (
+        <Card key={p.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6">
+          <div className="flex items-start justify-between">
+            <div><div className="font-bold text-slate-800">{p.company}</div><div className="text-sm text-indigo-600">{p.role}</div></div>
+            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">{p.package}</Badge>
+          </div>
+          <div className="mt-2 space-y-1 text-xs text-slate-500"><div>Eligibility: {p.eligibility}</div><div>Location: {p.location} · Interview: {fmtDate(p.interviewDate)}</div></div>
+          {p.applied ? <Badge className="mt-3 bg-indigo-100 text-indigo-700 hover:bg-indigo-100">✓ Applied ({p.appStatus})</Badge> : <Button size="sm" className="mt-3 bg-gradient-to-r from-indigo-500 to-violet-600" onClick={() => apply(p.id)}>Apply Now</Button>}
+        </CardContent></Card>
+      ))}
+    </div>
+  )
+}
+
+const CAL_COLORS = { Present: 'bg-emerald-500 text-white', Absent: 'bg-rose-500 text-white', Late: 'bg-amber-500 text-white', Leave: 'bg-violet-500 text-white', Holiday: 'bg-sky-400 text-white', 'Not Scheduled': 'bg-slate-100 text-slate-400' }
+function todayMonth() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` }
+function CalendarGrid({ data }) {
+  if (!data) return <Skeleton className="h-72 rounded-2xl" />
+  const [y, m] = data.month.split('-').map(Number)
+  const first = new Date(y, m - 1, 1); const startDow = first.getDay(); const daysIn = new Date(y, m, 0).getDate()
+  const cells = []
+  for (let i = 0; i < startDow; i++) cells.push(null)
+  for (let d = 1; d <= daysIn; d++) { const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`; cells.push({ d, ds, info: data.days[ds] }) }
+  return (
+    <div>
+      <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-medium text-slate-400">{['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(x => <div key={x}>{x}</div>)}</div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((c, i) => c ? (
+          <div key={i} className={`grid aspect-square place-items-center rounded-lg text-sm font-medium ${c.info ? CAL_COLORS[c.info.status] : 'bg-slate-50 text-slate-500'}`} title={c.info?.status || ''}>{c.d}</div>
+        ) : <div key={i} />)}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">{['Present', 'Absent', 'Late', 'Leave', 'Holiday'].map(k => <span key={k} className="flex items-center gap-1"><span className={`h-3 w-3 rounded ${CAL_COLORS[k]}`} />{k}</span>)}</div>
+    </div>
+  )
+}
+function StudentCalendar() {
+  const [month, setMonth] = useState(() => todayMonth())
+  const [data, setData] = useState(null)
+  useEffect(() => { setData(null); api(`/attendance/calendar?month=${month}`).then(setData).catch(() => {}) }, [month])
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between"><h2 className="text-lg font-bold text-slate-900">Attendance Calendar</h2><Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-44" /></div>
+      <Card className="rounded-2xl"><CardContent className="pt-6"><CalendarGrid data={data} /></CardContent></Card>
+    </div>
+  )
+}
+
+/* ============================ TRAINER ============================ */
+const TRAINER_NAV = [
+  { key: 'dashboard', label: 'My Classes', icon: LayoutDashboard },
+  { key: 'attendance', label: 'Attendance', icon: FileBarChart },
+  { key: 'students', label: 'Students', icon: Users },
+]
+function TrainerApp({ user, onLogout }) {
+  const [view, setView] = useState('dashboard')
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-5 backdrop-blur">
+        <Logo />
+        <div className="flex items-center gap-4">
+          <nav className="hidden gap-1 sm:flex">{TRAINER_NAV.map(n => (
+            <button key={n.key} onClick={() => setView(n.key)} className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${view === n.key ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}><n.icon className="h-4 w-4" />{n.label}</button>
+          ))}</nav>
+          <Avatar className="h-9 w-9"><AvatarFallback className="bg-violet-100 text-sm font-semibold text-violet-700">{initials(user.name)}</AvatarFallback></Avatar>
+          <button onClick={onLogout} className="grid h-9 w-9 place-items-center rounded-full hover:bg-rose-50"><LogOut className="h-5 w-5 text-rose-500" /></button>
+        </div>
+      </header>
+      <div className="flex gap-1 border-b border-slate-200 bg-white px-3 sm:hidden">{TRAINER_NAV.map(n => (
+        <button key={n.key} onClick={() => setView(n.key)} className={`flex items-center gap-1 px-3 py-2.5 text-sm font-medium ${view === n.key ? 'text-indigo-600' : 'text-slate-500'}`}><n.icon className="h-4 w-4" />{n.label}</button>
+      ))}</div>
+      <main className="mx-auto max-w-5xl p-5">
+        <AnimatePresence mode="wait">
+          <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+            {view === 'dashboard' && <TrainerDashboard user={user} />}
+            {view === 'attendance' && <TrainerAttendance />}
+            {view === 'students' && <TrainerStudents />}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
+  )
+}
+function TrainerDashboard({ user }) {
+  const [data, setData] = useState(null); const [qr, setQr] = useState(null)
+  const load = () => api('/dashboard/trainer').then(setData).catch(() => {})
+  useEffect(() => { load() }, [])
+  const genQR = async (s) => { try { const sess = await api('/sessions', 'POST', { scheduleId: s.id }); setQr({ ...sess, schedule: s }); toast.success('QR generated') } catch (e) { toast.error(e.message) } }
+  if (!data) return <Skeleton className="h-64 rounded-2xl" />
+  return (
+    <div className="space-y-5">
+      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white"><div className="text-sm text-indigo-100">{greet()},</div><div className="text-2xl font-bold">{user.name} 👋</div><div className="text-sm text-indigo-100">Welcome to your trainer portal</div></div>
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard icon={CalendarDays} label="Classes Today" value={data.todaySchedules.length} color="indigo" />
+        <StatCard icon={Users} label="My Students" value={data.totalStudents} color="emerald" />
+        <StatCard icon={CheckCircle2} label="Present Today" value={data.presentToday} color="emerald" />
+        <StatCard icon={Radio} label="Inside Now" value={data.insideNow} color="violet" />
+      </div>
+      <div>
+        <h3 className="mb-2 font-semibold text-slate-800">Today's Classes</h3>
+        {data.todaySchedules.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled today" /> : (
+          <div className="space-y-2">{data.todaySchedules.map(s => (
+            <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex flex-wrap items-center gap-4 pt-6">
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-indigo-100 text-indigo-600"><Clock className="h-5 w-5" /></div>
+              <div><div className="font-bold text-slate-800">{s.startTime} - {s.endTime}</div><div className="text-xs text-slate-400">{s.classType} · {s.batchName} · {s.room}</div></div>
+              <div className="ml-auto flex items-center gap-2"><StatusBadge status={s.status} /><Button size="sm" onClick={() => genQR(s)} className="bg-gradient-to-r from-emerald-500 to-teal-600"><QrCode className="mr-1 h-4 w-4" /> Generate QR</Button></div>
+            </CardContent></Card>
+          ))}</div>
+        )}
+      </div>
+      <QRDialog qr={qr} onClose={() => setQr(null)} />
+    </div>
+  )
+}
+function TrainerAttendance() {
+  const [list, setList] = useState(null); const [date, setDate] = useState('')
+  const load = useCallback(() => { const p = new URLSearchParams(); if (date) p.set('date', date); api(`/attendance/report?${p}`).then(setList) }, [date])
+  useEffect(() => { load() }, [load])
+  const exportPdf = () => {
+    if (!list?.length) return toast.error('Nothing to export')
+    const rows = list.map(r => `<tr><td>${r.date}</td><td>${r.studentName}</td><td>${r.classType}</td><td>${fmtTime(r.checkInTime)}</td><td>${r.status}</td></tr>`).join('')
+    const html = `<html><head><title>My Attendance Report</title><style>body{font-family:system-ui,Arial;padding:24px}h1{color:#4f46e5}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#eef2ff;text-align:left;padding:8px}td{padding:8px;border-bottom:1px solid #e2e8f0}</style></head><body><h1>Besant StudentHub — My Classes Attendance</h1><table><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Check-in</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+    const w = window.open('', '_blank'); if (!w) return toast.error('Allow popups'); w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400)
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3"><Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-44" /><Button variant="outline" onClick={exportPdf}><Printer className="mr-1 h-4 w-4" /> Export PDF</Button></div>
+      {!list ? <Skeleton className="h-64 rounded-2xl" /> : list.length === 0 ? <Empty icon={FileBarChart} title="No attendance records for your classes" /> : (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Student</th><th className="px-4 py-3">Class</th><th className="px-4 py-3">Check-in</th><th className="px-4 py-3">Status</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">{list.map(r => (<tr key={r.id}><td className="px-4 py-3 text-slate-500">{r.date}</td><td className="px-4 py-3 font-medium text-slate-800">{r.studentName}</td><td className="px-4 py-3">{r.classType}</td><td className="px-4 py-3">{fmtTime(r.checkInTime)}</td><td className="px-4 py-3"><StatusBadge status={r.status} /></td></tr>))}</tbody>
+        </table></div></div>
+      )}
+    </div>
+  )
+}
+function TrainerStudents() {
+  const [data, setData] = useState(null)
+  useEffect(() => { api('/dashboard/trainer').then(setData).catch(() => {}) }, [])
+  if (!data) return <Skeleton className="h-64 rounded-2xl" />
+  if (!data.students.length) return <Empty icon={Users} title="No students in your batches" />
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{data.students.map(s => (
+      <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center gap-3 pt-6"><Avatar className="h-10 w-10"><AvatarFallback className="bg-indigo-100 text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId} · {s.batchName}</div></div></CardContent></Card>
+    ))}</div>
+  )
+}
+
 /* ============================ ROOT ============================ */
 function App() {
   const [booting, setBooting] = useState(true)
@@ -1312,7 +1561,9 @@ function App() {
   if (booting) return <div className="grid min-h-screen place-items-center bg-slate-950"><Loader2 className="h-8 w-8 animate-spin text-indigo-400" /></div>
   if (!token || !user) return <LoginScreen onLogin={onLogin} />
   if (needPwd) return <ChangePassword onDone={() => setNeedPwd(false)} />
-  return user.role === 'admin' ? <AdminApp user={user} onLogout={logout} /> : <StudentApp user={user} onLogout={logout} />
+  if (user.role === 'admin') return <AdminApp user={user} onLogout={logout} />
+  if (user.role === 'trainer') return <TrainerApp user={user} onLogout={logout} />
+  return <StudentApp user={user} onLogout={logout} />
 }
 
 export default App

@@ -5,15 +5,13 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
 // ---------------- Mongo ----------------
-let client
-let db
+let dbPromise
 async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+  if (!dbPromise) {
+    const c = new MongoClient(process.env.MONGO_URL)
+    dbPromise = c.connect().then(cl => cl.db(process.env.DB_NAME))
   }
-  return db
+  return dbPromise
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'besant_secret'
@@ -115,6 +113,16 @@ async function ensureDefaults(db) {
 async function seedDemo(db) {
   await ensureDefaults(db)
   const settings = await db.collection('settings').findOne({ id: 'global' })
+  // Branches
+  let branches = await db.collection('branches').find({}).toArray()
+  if (branches.length === 0) {
+    branches = [
+      { id: uuidv4(), name: 'Velachery', city: 'Chennai', lat: 12.9756, lng: 80.2207, radius: 200, active: true, createdAt: new Date().toISOString() },
+      { id: uuidv4(), name: 'Coimbatore', city: 'Coimbatore', lat: 11.0168, lng: 76.9558, radius: 200, active: true, createdAt: new Date().toISOString() },
+    ]
+    await db.collection('branches').insertMany(branches)
+  }
+  const mainBranch = branches[0]
   // Trainers
   let trainers = await db.collection('trainers').find({}).toArray()
   if (trainers.length === 0) {
@@ -125,9 +133,16 @@ async function seedDemo(db) {
       { name: 'Deepa Nair', skills: 'Aptitude, Communication', courses: 'Soft Skills' },
       { name: 'Karthik Raja', skills: 'Data Science, ML', courses: 'Data Science' },
     ]
-    trainers = t.map((x, i) => ({ id: uuidv4(), trainerId: `TR-${String(i + 1).padStart(2, '0')}`, name: x.name, email: `${x.name.split(' ')[0].toLowerCase()}@besant.com`, mobile: `98${Math.floor(10000000 + Math.random() * 89999999)}`, skills: x.skills, courses: x.courses, status: 'Active', createdAt: new Date().toISOString() }))
+    trainers = t.map((x, i) => ({ id: uuidv4(), trainerId: `TR-${String(i + 1).padStart(2, '0')}`, loginId: `TR-${String(i + 1).padStart(2, '0')}`, passwordHash: bcrypt.hashSync('Trainer@2026', 8), name: x.name, email: `${x.name.split(' ')[0].toLowerCase()}@besant.com`, mobile: `98${Math.floor(10000000 + Math.random() * 89999999)}`, skills: x.skills, courses: x.courses, branchId: mainBranch.id, status: 'Active', lastLogin: null, createdAt: new Date().toISOString() }))
     await db.collection('trainers').insertMany(trainers)
   }
+  // migrate trainers missing login creds
+  for (const tr of trainers) {
+    if (!tr.loginId || !tr.passwordHash) {
+      await db.collection('trainers').updateOne({ id: tr.id }, { $set: { loginId: tr.trainerId, passwordHash: bcrypt.hashSync('Trainer@2026', 8), branchId: tr.branchId || mainBranch.id } })
+    }
+  }
+  trainers = await db.collection('trainers').find({}).toArray()
   const courses = await db.collection('courses').find({}).toArray()
   const pyCourse = courses.find(c => c.name === 'Python Full Stack') || courses[0]
   // Batches
@@ -159,6 +174,7 @@ async function seedDemo(db) {
         courseId: batch.courseId, courseName: batch.courseName, batchId: batch.id, batchName: batch.batchId,
         batchYear: '2026', enrollmentDate: '2026-01-05', courseStart: '2026-01-05', courseEnd: '2026-07-05',
         trainerId: batch.trainerId, trainerName: batch.trainerName, status: 'Active',
+        branchId: mainBranch.id,
         emergencyContact: 'Parent', emergencyNumber: `95${Math.floor(10000000 + Math.random() * 89999999)}`,
         accountStatus: 'Active', requirePasswordChange: false, firstLoginCompleted: true, lastLogin: null,
         createdAt: new Date().toISOString(),
@@ -204,6 +220,15 @@ async function seedDemo(db) {
   if (notifCount === 0) {
     await db.collection('notifications').insertOne({ id: uuidv4(), target: 'all', targetId: null, title: 'Welcome to Besant StudentHub', message: 'Your student portal is ready. Scan the class QR to mark attendance.', read: [], createdAt: new Date().toISOString() })
   }
+  // Placements
+  const placeCount = await db.collection('placements').countDocuments()
+  if (placeCount === 0) {
+    await db.collection('placements').insertMany([
+      { id: uuidv4(), company: 'TCS', role: 'Junior Python Developer', eligibility: 'Python Full Stack, 70%+', package: '4.5 LPA', location: 'Chennai', interviewDate: '2026-08-10', active: true, createdAt: new Date().toISOString() },
+      { id: uuidv4(), company: 'Zoho', role: 'Software Engineer Trainee', eligibility: 'Any Full Stack', package: '6 LPA', location: 'Chennai', interviewDate: '2026-08-15', active: true, createdAt: new Date().toISOString() },
+      { id: uuidv4(), company: 'Freshworks', role: 'Associate Developer', eligibility: 'Java/Python Full Stack', package: '5.5 LPA', location: 'Chennai', interviewDate: '2026-08-20', active: true, createdAt: new Date().toISOString() },
+    ])
+  }
   return { ok: true }
 }
 
@@ -240,6 +265,7 @@ async function handleRoute(request, { params }) {
     const auth = getAuth(request)
     const isAdmin = auth?.role === 'admin'
     const isStudent = auth?.role === 'student'
+    const isTrainer = auth?.role === 'trainer'
     let body = {}
     if (['POST', 'PUT', 'PATCH'].includes(method)) { try { body = await request.json() } catch { body = {} } }
 
@@ -253,6 +279,13 @@ async function handleRoute(request, { params }) {
         await db.collection('admins').updateOne({ id: a.id }, { $set: { lastLogin: new Date().toISOString() } })
         const token = signToken({ id: a.id, role: 'admin', name: a.name })
         return json({ token, user: { id: a.id, name: a.name, role: 'admin', email: a.email, mustChangePassword: a.mustChangePassword } })
+      } else if (role === 'trainer') {
+        const tr = await db.collection('trainers').findOne({ $or: [{ loginId: loginId.trim() }, { email: loginId.trim() }] })
+        if (!tr || !tr.passwordHash || !bcrypt.compareSync(password, tr.passwordHash)) return json({ error: 'Invalid credentials' }, 401)
+        if (tr.status !== 'Active') return json({ error: 'Account is inactive. Contact Admin.' }, 403)
+        await db.collection('trainers').updateOne({ id: tr.id }, { $set: { lastLogin: new Date().toISOString() } })
+        const token = signToken({ id: tr.id, role: 'trainer', name: tr.name })
+        return json({ token, user: { id: tr.id, name: tr.name, role: 'trainer', loginId: tr.loginId } })
       } else {
         const st = await db.collection('students').findOne({ loginId: loginId.trim() })
         if (!st || !bcrypt.compareSync(password, st.passwordHash)) return json({ error: 'Invalid credentials' }, 401)
@@ -265,13 +298,14 @@ async function handleRoute(request, { params }) {
     if (route === '/auth/me' && method === 'GET') {
       if (!auth) return json({ error: 'Unauthorized' }, 401)
       if (isAdmin) { const a = await db.collection('admins').findOne({ id: auth.id }); return json({ user: { ...clean(a), role: 'admin' } }) }
+      if (isTrainer) { const tr = await db.collection('trainers').findOne({ id: auth.id }); return json({ user: { ...clean(tr), role: 'trainer' } }) }
       const st = await db.collection('students').findOne({ id: auth.id }); return json({ user: { ...clean(st), role: 'student' } })
     }
     if (route === '/auth/change-password' && method === 'POST') {
       if (!auth) return json({ error: 'Unauthorized' }, 401)
       const { currentPassword, newPassword } = body
       if (!newPassword || newPassword.length < 4) return json({ error: 'New password too short' }, 400)
-      const col = isAdmin ? 'admins' : 'students'
+      const col = isAdmin ? 'admins' : isTrainer ? 'trainers' : 'students'
       const u = await db.collection(col).findOne({ id: auth.id })
       if (!bcrypt.compareSync(currentPassword || '', u.passwordHash)) return json({ error: 'Current password incorrect' }, 400)
       await db.collection(col).updateOne({ id: auth.id }, { $set: { passwordHash: bcrypt.hashSync(newPassword, 8), requirePasswordChange: false, firstLoginCompleted: true, mustChangePassword: false } })
@@ -318,8 +352,15 @@ async function handleRoute(request, { params }) {
     if (route === '/trainers' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const count = await db.collection('trainers').countDocuments()
-      const t = { id: uuidv4(), trainerId: body.trainerId || `TR-${String(count + 1).padStart(2, '0')}`, name: body.name, email: body.email || '', mobile: body.mobile || '', skills: body.skills || '', courses: body.courses || '', status: body.status || 'Active', createdAt: new Date().toISOString() }
+      const trainerId = body.trainerId || `TR-${String(count + 1).padStart(2, '0')}`
+      const t = { id: uuidv4(), trainerId, loginId: body.loginId || trainerId, passwordHash: bcrypt.hashSync(body.password || 'Trainer@2026', 8), name: body.name, email: body.email || '', mobile: body.mobile || '', skills: body.skills || '', courses: body.courses || '', branchId: body.branchId || null, status: body.status || 'Active', lastLogin: null, createdAt: new Date().toISOString() }
       await db.collection('trainers').insertOne(t); await audit(db, auth.id, 'Created trainer', 'trainer', t.id, t.name); return json(clean(t))
+    }
+    if (route.endsWith('/reset-password') && route.startsWith('/trainers/') && method === 'POST') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      const id = path[1]; const np = body.newPassword || 'Trainer@2026'
+      await db.collection('trainers').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 8) } })
+      await audit(db, auth.id, 'Reset trainer password', 'trainer', id); return json({ ok: true, newPassword: np })
     }
     if (route.startsWith('/trainers/') && method === 'PUT') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const id = path[1]; const { _id, id: _i, ...upd } = body; await db.collection('trainers').updateOne({ id }, { $set: upd }); return json({ ok: true }) }
     if (route.startsWith('/trainers/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('trainers').deleteOne({ id: path[1] }); return json({ ok: true }) }
@@ -364,6 +405,7 @@ async function handleRoute(request, { params }) {
         courseId: body.courseId, courseName: course?.name, batchId: body.batchId, batchName: batch?.batchId,
         batchYear: body.batchYear || '', enrollmentDate: body.enrollmentDate || todayStr(), courseStart: body.courseStart || '', courseEnd: body.courseEnd || '',
         trainerId: trainer?.id, trainerName: trainer?.name, status: body.status || 'Active',
+        branchId: body.branchId || null,
         emergencyContact: body.emergencyContact || '', emergencyNumber: body.emergencyNumber || '',
         accountStatus: 'Active', requirePasswordChange: !!body.requirePasswordChange, firstLoginCompleted: false, lastLogin: null,
         createdAt: new Date().toISOString(),
@@ -408,6 +450,7 @@ async function handleRoute(request, { params }) {
       if (batchId) filter.batchId = batchId
       // student can only see own batch
       if (isStudent) { const st = await db.collection('students').findOne({ id: auth.id }); filter.batchId = st.batchId }
+      if (isTrainer) { filter.trainerId = auth.id }
       const list = await db.collection('schedules').find(filter).sort({ date: 1, startTime: 1 }).toArray()
       return json(cleanArr(list))
     }
@@ -436,9 +479,10 @@ async function handleRoute(request, { params }) {
 
     // ---------- SESSIONS (QR) ----------
     if (route === '/sessions' && method === 'POST') {
-      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      if (!isAdmin && !isTrainer) return json({ error: 'Forbidden' }, 403)
       const sched = await db.collection('schedules').findOne({ id: body.scheduleId })
       if (!sched) return json({ error: 'Schedule not found' }, 404)
+      if (isTrainer && sched.trainerId !== auth.id) return json({ error: 'You can only generate QR for your own classes' }, 403)
       const settings = await db.collection('settings').findOne({ id: 'global' })
       const now = new Date()
       const schedEnd = dt(sched.date, sched.endTime)
@@ -486,12 +530,14 @@ async function handleRoute(request, { params }) {
           return json({ error: 'OVERLAP', message: 'You are already attending another class.' }, 409)
         }
       }
-      // location
+      // location (use student's branch center if configured, else global)
       const settings = await db.collection('settings').findOne({ id: 'global' })
+      let centerLat = settings.centerLat, centerLng = settings.centerLng, radius = settings.radiusMeters
+      if (st.branchId) { const br = await db.collection('branches').findOne({ id: st.branchId }); if (br && br.lat != null && br.lng != null) { centerLat = br.lat; centerLng = br.lng; radius = br.radius || radius } }
       let locationVerified = true, distance = null
       if (lat != null && lng != null) {
-        distance = haversine(Number(lat), Number(lng), settings.centerLat, settings.centerLng)
-        if (distance != null) locationVerified = distance <= settings.radiusMeters
+        distance = haversine(Number(lat), Number(lng), centerLat, centerLng)
+        if (distance != null) locationVerified = distance <= radius
       } else { locationVerified = false }
       if (settings.locationMode === 'strict' && !locationVerified) {
         return json({ error: 'LOCATION', message: 'Location Verification Failed — you appear to be outside the permitted attendance location.' }, 403)
@@ -566,11 +612,12 @@ async function handleRoute(request, { params }) {
       return json({ session: sessions[0] ? clean(sessions[0]) : null, activeSessions: cleanArr(sessions), schedule: clean(sched), stats: { present, late, absent, inside, total: rows.length }, rows })
     }
     if (route === '/attendance/report' && method === 'GET') {
-      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      if (!isAdmin && !isTrainer) return json({ error: 'Forbidden' }, 403)
       const url = new URL(request.url)
       const date = url.searchParams.get('date'); const batchId = url.searchParams.get('batchId'); const status = url.searchParams.get('status')
       await autoCheckout(db)
       const filter = {}; if (date) filter.date = date; if (batchId) filter.batchId = batchId; if (status) filter.status = status
+      if (isTrainer) filter.trainerName = auth.name
       const recs = await db.collection('attendance').find(filter).sort({ checkInTime: -1 }).limit(1000).toArray()
       return json(cleanArr(recs))
     }
@@ -720,6 +767,102 @@ async function handleRoute(request, { params }) {
         todayAttended: todayRecs.filter(r => r.status !== 'Rejected').length,
         todayTotal: todaySchedules.length,
         overallPct: pct, totalClasses: allRecs.length, present, current: clean(cur), monthly,
+      })
+    }
+
+    // ---------- BRANCHES ----------
+    if (route === '/branches' && method === 'GET') return json(cleanArr(await db.collection('branches').find({}).sort({ createdAt: 1 }).toArray()))
+    if (route === '/branches' && method === 'POST') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      const b = { id: uuidv4(), name: body.name, city: body.city || '', lat: body.lat != null ? Number(body.lat) : null, lng: body.lng != null ? Number(body.lng) : null, radius: Number(body.radius) || 200, active: true, createdAt: new Date().toISOString() }
+      await db.collection('branches').insertOne(b); await audit(db, auth.id, 'Created branch', 'branch', b.id, b.name); return json(clean(b))
+    }
+    if (route.startsWith('/branches/') && method === 'PUT') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const id = path[1]; const { _id, id: _i, ...upd } = body; if (upd.lat != null) upd.lat = Number(upd.lat); if (upd.lng != null) upd.lng = Number(upd.lng); if (upd.radius != null) upd.radius = Number(upd.radius); await db.collection('branches').updateOne({ id }, { $set: upd }); return json({ ok: true }) }
+    if (route.startsWith('/branches/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('branches').deleteOne({ id: path[1] }); return json({ ok: true }) }
+
+    // ---------- PLACEMENTS ----------
+    if (route === '/placements' && method === 'GET') {
+      if (!auth) return json({ error: 'Unauthorized' }, 401)
+      const list = await db.collection('placements').find({}).sort({ createdAt: -1 }).toArray()
+      if (isStudent) {
+        const apps = await db.collection('placementApps').find({ studentId: auth.id }).toArray()
+        const appMap = {}; apps.forEach(a => appMap[a.placementId] = a.status)
+        return json(cleanArr(list.filter(p => p.active !== false).map(p => ({ ...p, applied: appMap[p.id] ? true : false, appStatus: appMap[p.id] || null }))))
+      }
+      // admin: include applicant counts
+      const apps = await db.collection('placementApps').find({}).toArray()
+      return json(cleanArr(list.map(p => ({ ...p, applicants: apps.filter(a => a.placementId === p.id).length }))))
+    }
+    if (route === '/placements' && method === 'POST') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      const p = { id: uuidv4(), company: body.company, role: body.role, eligibility: body.eligibility || '', package: body.package || '', location: body.location || '', interviewDate: body.interviewDate || '', active: true, createdAt: new Date().toISOString() }
+      await db.collection('placements').insertOne(p); await audit(db, auth.id, 'Created placement', 'placement', p.id, `${p.company} - ${p.role}`); return json(clean(p))
+    }
+    if (route.startsWith('/placements/') && route.endsWith('/apply') && method === 'POST') {
+      if (!isStudent) return json({ error: 'Forbidden' }, 403)
+      const id = path[1]; const exist = await db.collection('placementApps').findOne({ placementId: id, studentId: auth.id })
+      if (exist) return json({ error: 'Already applied' }, 400)
+      const st = await db.collection('students').findOne({ id: auth.id })
+      await db.collection('placementApps').insertOne({ id: uuidv4(), placementId: id, studentId: auth.id, studentName: st.name, studentCode: st.studentId, courseName: st.courseName, batchName: st.batchName, status: 'Applied', createdAt: new Date().toISOString() })
+      return json({ ok: true })
+    }
+    if (route.startsWith('/placements/') && route.endsWith('/applicants') && method === 'GET') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      const id = path[1]; return json(cleanArr(await db.collection('placementApps').find({ placementId: id }).sort({ createdAt: -1 }).toArray()))
+    }
+    if (route.startsWith('/placements/') && path.length === 2 && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('placements').deleteOne({ id: path[1] }); await db.collection('placementApps').deleteMany({ placementId: path[1] }); return json({ ok: true }) }
+
+    // ---------- ATTENDANCE CALENDAR ----------
+    if (route === '/attendance/calendar' && method === 'GET') {
+      const url = new URL(request.url)
+      let studentId = url.searchParams.get('studentId')
+      const month = url.searchParams.get('month') || todayStr().slice(0, 7) // YYYY-MM
+      if (isStudent) studentId = auth.id
+      if (!isAdmin && !isTrainer && !(isStudent && studentId === auth.id)) return json({ error: 'Forbidden' }, 403)
+      if (!studentId) return json({ error: 'studentId required' }, 400)
+      await autoCheckout(db)
+      const st = await db.collection('students').findOne({ id: studentId })
+      const recs = await db.collection('attendance').find({ studentId, date: { $regex: `^${month}` } }).toArray()
+      const scheds = st ? await db.collection('schedules').find({ batchId: st.batchId, date: { $regex: `^${month}` } }).toArray() : []
+      const holidays = await db.collection('holidays').find({ date: { $regex: `^${month}` } }).toArray()
+      // group by day
+      const days = {}
+      for (const d of [...new Set([...recs.map(r => r.date), ...scheds.map(s => s.date)])]) {
+        const dayRecs = recs.filter(r => r.date === d)
+        const daySched = scheds.filter(s => s.date === d)
+        let status = 'Not Scheduled'
+        if (daySched.length) {
+          const present = dayRecs.filter(r => r.status === 'Present' || r.status === 'Late').length
+          const leave = dayRecs.filter(r => r.status === 'Leave').length
+          if (present > 0) status = 'Present'
+          else if (leave > 0) status = 'Leave'
+          else status = 'Absent'
+        }
+        days[d] = { status, scheduled: daySched.length, attended: dayRecs.filter(r => r.status !== 'Rejected').length, records: cleanArr(dayRecs) }
+      }
+      holidays.forEach(h => { days[h.date] = { status: 'Holiday', name: h.name, scheduled: 0, attended: 0, records: [] } })
+      return json({ month, days, holidays: cleanArr(holidays) })
+    }
+
+    // ---------- TRAINER DASHBOARD ----------
+    if (route === '/dashboard/trainer' && method === 'GET') {
+      if (!isTrainer) return json({ error: 'Forbidden' }, 403)
+      await autoCheckout(db)
+      const today = todayStr()
+      const todaySchedules = await db.collection('schedules').find({ trainerId: auth.id, date: today }).sort({ startTime: 1 }).toArray()
+      const allSchedules = await db.collection('schedules').find({ trainerId: auth.id }).toArray()
+      const batchIds = [...new Set(allSchedules.map(s => s.batchId))]
+      const students = await db.collection('students').find({ batchId: { $in: batchIds } }).toArray()
+      const myRecs = await db.collection('attendance').find({ trainerName: auth.name }).toArray()
+      const todayRecs = myRecs.filter(r => r.date === today)
+      return json({
+        todaySchedules: cleanArr(todaySchedules),
+        totalClasses: allSchedules.length,
+        totalStudents: students.length,
+        presentToday: todayRecs.filter(r => r.status === 'Present').length,
+        lateToday: todayRecs.filter(r => r.status === 'Late').length,
+        insideNow: todayRecs.filter(r => !r.checkOutTime && r.status !== 'Rejected').length,
+        students: cleanArr(students),
       })
     }
 

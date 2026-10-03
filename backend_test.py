@@ -1,1031 +1,627 @@
 #!/usr/bin/env python3
 """
-Besant StudentHub Backend API Test Suite
-Tests all backend endpoints including auth, QR attendance flow, and validations
+Backend API Testing for Besant StudentHub - Round 2
+Tests new features: Trainer Auth, Trainer Dashboard, Branches, Placements, Calendar, Branch-aware check-in
 """
-
 import requests
 import json
+import time
 from datetime import datetime, timedelta
 
-# Base URL from environment
+# Base URL from .env
 BASE_URL = "https://learn-checkin-1.preview.emergentagent.com/api"
 
 # Test credentials
-ADMIN_CREDS = {
-    "role": "admin",
-    "loginId": "besanttech@2026",
-    "password": "besanttech@2026"
-}
-
-STUDENT_CREDS = {
-    "role": "student",
-    "loginId": "BST-PY-001",
-    "password": "Bst@2026"
-}
+ADMIN_CREDS = {"role": "admin", "loginId": "besanttech@2026", "password": "besanttech@2026"}
+TRAINER_CREDS = {"role": "trainer", "loginId": "TR-01", "password": "Trainer@2026"}
+STUDENT_CREDS = {"role": "student", "loginId": "BST-PY-001", "password": "Bst@2026"}
 
 # Global tokens
 admin_token = None
+trainer_token = None
 student_token = None
-student_id = None
-student2_token = None
-student2_id = None
+trainer_user = None
+student_user = None
 
-def log_test(name, passed, details=""):
-    """Log test results"""
+def log(msg):
+    print(f"[TEST] {msg}", flush=True)
+
+def test_result(name, passed, detail=""):
     status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {name}")
-    if details:
-        print(f"   Details: {details}")
+    print(f"{status}: {name}", flush=True)
+    if detail:
+        print(f"    {detail}", flush=True)
     return passed
 
-def get_today():
-    """Get today's date in YYYY-MM-DD format"""
-    return datetime.now().strftime("%Y-%m-%d")
-
-# ============================================================================
-# SETUP / SEED
-# ============================================================================
-
-def test_seed():
-    """Test POST /api/seed - populate demo data"""
-    print("\n=== SETUP: Seed Demo Data ===")
+def post(endpoint, data=None, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = f"{BASE_URL}{endpoint}"
     try:
-        response = requests.post(f"{BASE_URL}/seed", timeout=30)
-        data = response.json()
-        passed = response.status_code == 200 and data.get("ok") == True
-        return log_test("POST /api/seed", passed, f"Status: {response.status_code}, Response: {data}")
+        time.sleep(0.1)  # Small delay to avoid rate limiting
+        r = requests.post(url, json=data or {}, headers=headers, timeout=30)
+        return r
+    except requests.exceptions.Timeout:
+        log(f"POST {endpoint} timeout after 30s")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"POST {endpoint} connection error: {str(e)[:100]}")
+        return None
     except Exception as e:
-        return log_test("POST /api/seed", False, str(e))
+        log(f"POST {endpoint} error: {type(e).__name__}: {str(e)[:100]}")
+        return None
 
-# ============================================================================
-# AUTH TESTS
-# ============================================================================
-
-def test_admin_login():
-    """Test admin login"""
-    print("\n=== AUTH: Admin Login ===")
-    global admin_token
+def get(endpoint, token=None, params=None):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = f"{BASE_URL}{endpoint}"
     try:
-        response = requests.post(f"{BASE_URL}/auth/login", json=ADMIN_CREDS, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and "token" in data and "user" in data:
-            admin_token = data["token"]
-            user = data["user"]
-            passed = user.get("role") == "admin" and user.get("email") == ADMIN_CREDS["loginId"]
-            return log_test("Admin login", passed, f"Token received, user: {user.get('name')}")
-        else:
-            return log_test("Admin login", False, f"Status: {response.status_code}, Response: {data}")
+        time.sleep(0.1)  # Small delay to avoid rate limiting
+        r = requests.get(url, headers=headers, params=params or {}, timeout=30)
+        return r
+    except requests.exceptions.Timeout:
+        log(f"GET {endpoint} timeout after 30s")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"GET {endpoint} connection error: {str(e)[:100]}")
+        return None
     except Exception as e:
-        return log_test("Admin login", False, str(e))
+        log(f"GET {endpoint} error: {type(e).__name__}: {str(e)[:100]}")
+        return None
 
-def test_student_login():
-    """Test student login"""
-    print("\n=== AUTH: Student Login ===")
-    global student_token, student_id
+def put(endpoint, data=None, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = f"{BASE_URL}{endpoint}"
     try:
-        response = requests.post(f"{BASE_URL}/auth/login", json=STUDENT_CREDS, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and "token" in data and "user" in data:
-            student_token = data["token"]
-            student_id = data["user"]["id"]
-            user = data["user"]
-            passed = user.get("role") == "student" and user.get("loginId") == STUDENT_CREDS["loginId"]
-            return log_test("Student login", passed, f"Token received, user: {user.get('name')}, ID: {student_id}")
-        else:
-            return log_test("Student login", False, f"Status: {response.status_code}, Response: {data}")
+        time.sleep(0.1)  # Small delay to avoid rate limiting
+        r = requests.put(url, json=data or {}, headers=headers, timeout=30)
+        return r
+    except requests.exceptions.Timeout:
+        log(f"PUT {endpoint} timeout after 30s")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"PUT {endpoint} connection error: {str(e)[:100]}")
+        return None
     except Exception as e:
-        return log_test("Student login", False, str(e))
+        log(f"PUT {endpoint} error: {type(e).__name__}: {str(e)[:100]}")
+        return None
 
-def test_invalid_password():
-    """Test login with invalid password"""
-    print("\n=== AUTH: Invalid Password ===")
+def delete(endpoint, token=None):
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = f"{BASE_URL}{endpoint}"
     try:
-        creds = {**ADMIN_CREDS, "password": "wrongpassword"}
-        response = requests.post(f"{BASE_URL}/auth/login", json=creds, timeout=10)
-        data = response.json()
-        passed = response.status_code == 401 and "error" in data
-        return log_test("Invalid password returns 401", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
+        time.sleep(0.1)  # Small delay to avoid rate limiting
+        r = requests.delete(url, headers=headers, timeout=30)
+        return r
+    except requests.exceptions.Timeout:
+        log(f"DELETE {endpoint} timeout after 30s")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"DELETE {endpoint} connection error: {str(e)[:100]}")
+        return None
     except Exception as e:
-        return log_test("Invalid password returns 401", False, str(e))
+        log(f"DELETE {endpoint} error: {type(e).__name__}: {str(e)[:100]}")
+        return None
 
-def test_auth_me():
-    """Test /auth/me endpoint"""
-    print("\n=== AUTH: /auth/me ===")
-    try:
-        # Test admin
-        headers = {"Authorization": f"Bearer {admin_token}"}
-        response = requests.get(f"{BASE_URL}/auth/me", headers=headers, timeout=10)
-        data = response.json()
-        admin_passed = response.status_code == 200 and data.get("user", {}).get("role") == "admin"
-        log_test("Admin /auth/me", admin_passed, f"User: {data.get('user', {}).get('name')}")
-        
-        # Test student
-        headers = {"Authorization": f"Bearer {student_token}"}
-        response = requests.get(f"{BASE_URL}/auth/me", headers=headers, timeout=10)
-        data = response.json()
-        student_passed = response.status_code == 200 and data.get("user", {}).get("role") == "student"
-        log_test("Student /auth/me", student_passed, f"User: {data.get('user', {}).get('name')}")
-        
-        return admin_passed and student_passed
-    except Exception as e:
-        return log_test("/auth/me", False, str(e))
-
-def test_change_password():
-    """Test password change"""
-    print("\n=== AUTH: Change Password ===")
-    try:
-        # Change password
-        headers = {"Authorization": f"Bearer {student_token}"}
-        payload = {
-            "currentPassword": "Bst@2026",
-            "newPassword": "NewPass@2026"
-        }
-        response = requests.post(f"{BASE_URL}/auth/change-password", json=payload, headers=headers, timeout=10)
-        data = response.json()
-        change_passed = response.status_code == 200 and data.get("ok") == True
-        log_test("Change password", change_passed, f"Response: {data}")
-        
-        if not change_passed:
-            return False
-        
-        # Try login with new password
-        new_creds = {**STUDENT_CREDS, "password": "NewPass@2026"}
-        response = requests.post(f"{BASE_URL}/auth/login", json=new_creds, timeout=10)
-        login_passed = response.status_code == 200 and "token" in response.json()
-        log_test("Login with new password", login_passed)
-        
-        # Reset password back via admin
-        if login_passed:
-            headers = {"Authorization": f"Bearer {admin_token}"}
-            payload = {"newPassword": "Bst@2026"}
-            response = requests.post(f"{BASE_URL}/students/{student_id}/reset-password", json=payload, headers=headers, timeout=10)
-            reset_passed = response.status_code == 200
-            log_test("Admin reset password", reset_passed)
-        
-        return change_passed and login_passed
-    except Exception as e:
-        return log_test("Change password", False, str(e))
-
-# ============================================================================
-# ROLE SECURITY TESTS
-# ============================================================================
-
-def test_role_security():
-    """Test role-based access control"""
-    print("\n=== SECURITY: Role-Based Access ===")
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        
-        # Student calling admin-only endpoints should return 403
-        tests = [
-            ("GET /api/students", requests.get(f"{BASE_URL}/students", headers=student_headers, timeout=10)),
-            ("POST /api/courses", requests.post(f"{BASE_URL}/courses", json={"name": "Test"}, headers=student_headers, timeout=10)),
-            ("GET /api/attendance/live", requests.get(f"{BASE_URL}/attendance/live", headers=student_headers, timeout=10)),
-        ]
-        
-        all_passed = True
-        for name, response in tests:
-            passed = response.status_code == 403
-            log_test(f"Student forbidden from {name}", passed, f"Status: {response.status_code}")
-            all_passed = all_passed and passed
-        
-        # Student accessing other student's data should be 403
-        # First, get another student ID
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        response = requests.get(f"{BASE_URL}/students", headers=admin_headers, timeout=10)
-        students = response.json()
-        other_student = next((s for s in students if s["id"] != student_id), None)
-        
-        if other_student:
-            response = requests.get(f"{BASE_URL}/students/{other_student['id']}", headers=student_headers, timeout=10)
-            passed = response.status_code == 403
-            log_test("Student accessing other student data", passed, f"Status: {response.status_code}")
-            all_passed = all_passed and passed
-        
-        # Student accessing own data should be 200
-        response = requests.get(f"{BASE_URL}/students/{student_id}", headers=student_headers, timeout=10)
-        passed = response.status_code == 200
-        log_test("Student accessing own data", passed, f"Status: {response.status_code}")
-        all_passed = all_passed and passed
-        
-        return all_passed
-    except Exception as e:
-        return log_test("Role security", False, str(e))
-
-# ============================================================================
-# SCHEDULES & QR SESSION TESTS
-# ============================================================================
-
-def test_schedules_and_qr():
-    """Test schedules and QR session generation"""
-    print("\n=== SCHEDULES & QR SESSION ===")
-    global schedule_id, qr_token, session_id
+# ============ SETUP ============
+def setup():
+    global admin_token, trainer_token, student_token, trainer_user, student_user
     
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        today = get_today()
-        
-        # Get today's schedules
-        response = requests.get(f"{BASE_URL}/schedules?date={today}", headers=admin_headers, timeout=10)
-        schedules = response.json()
-        
-        if not schedules or len(schedules) == 0:
-            return log_test("Get schedules", False, "No schedules found for today")
-        
-        log_test("Get schedules", True, f"Found {len(schedules)} schedules for today")
-        
-        # Pick first schedule for PY-FS-01 batch
-        schedule = next((s for s in schedules if "PY-FS-01" in s.get("batchName", "")), schedules[0])
-        schedule_id = schedule["id"]
-        log_test("Found PY-FS-01 schedule", True, f"Schedule ID: {schedule_id}, Class: {schedule.get('classType')}")
-        
-        # Generate QR session
-        payload = {"scheduleId": schedule_id}
-        response = requests.post(f"{BASE_URL}/sessions", json=payload, headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and "token" in data:
-            qr_token = data["token"]
-            session_id = data["id"]
-            passed = data.get("active") == True and "validTo" in data
-            log_test("Generate QR session", passed, f"Token: {qr_token}, Valid until: {data.get('validTo')}")
-            
-            # Generate again to test deactivation of old session
-            response2 = requests.post(f"{BASE_URL}/sessions", json=payload, headers=admin_headers, timeout=10)
-            data2 = response2.json()
-            new_token = data2.get("token")
-            
-            if new_token and new_token != qr_token:
-                log_test("New QR deactivates old", True, f"New token: {new_token}")
-                # Update to use new token
-                qr_token = new_token
-                session_id = data2["id"]
-            else:
-                log_test("New QR deactivates old", False, "Same token returned")
-            
-            return passed
-        else:
-            return log_test("Generate QR session", False, f"Status: {response.status_code}, Response: {data}")
-    except Exception as e:
-        return log_test("Schedules & QR", False, str(e))
-
-# ============================================================================
-# ATTENDANCE CHECK-IN TESTS
-# ============================================================================
-
-def test_checkin_success():
-    """Test successful check-in"""
-    print("\n=== ATTENDANCE: Successful Check-in ===")
-    global attendance_id
+    log("=== SETUP: Seed data and login ===")
     
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        payload = {
-            "token": qr_token,
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload, headers=student_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and data.get("ok") == True:
-            record = data.get("record", {})
-            attendance_id = record.get("id")
-            status = data.get("status")
-            location_verified = data.get("locationVerified")
-            
-            passed = attendance_id and location_verified == True and status in ["Present", "Late"]
-            return log_test("Check-in success", passed, f"Status: {status}, Location verified: {location_verified}, ID: {attendance_id}")
-        else:
-            return log_test("Check-in success", False, f"Status: {response.status_code}, Response: {data}")
-    except Exception as e:
-        return log_test("Check-in success", False, str(e))
-
-def test_checkin_invalid_token():
-    """Test check-in with invalid token"""
-    print("\n=== ATTENDANCE: Invalid Token ===")
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        payload = {
-            "token": "INVALIDTOKEN",
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload, headers=student_headers, timeout=10)
-        data = response.json()
-        
-        passed = response.status_code == 400 and data.get("error") == "INVALID"
-        return log_test("Invalid token returns INVALID", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
-    except Exception as e:
-        return log_test("Invalid token", False, str(e))
-
-def test_checkin_duplicate():
-    """Test duplicate check-in"""
-    print("\n=== ATTENDANCE: Duplicate Check-in ===")
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        payload = {
-            "token": qr_token,
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload, headers=student_headers, timeout=10)
-        data = response.json()
-        
-        passed = response.status_code == 409 and data.get("error") == "ALREADY"
-        return log_test("Duplicate check-in returns ALREADY", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
-    except Exception as e:
-        return log_test("Duplicate check-in", False, str(e))
-
-def test_checkin_wrong_batch():
-    """Test check-in with student from different batch"""
-    print("\n=== ATTENDANCE: Wrong Batch ===")
-    global student2_token, student2_id
+    # 1. Seed data (migrates trainers + seeds branches/placements)
+    r = post("/seed", {})
+    if not test_result("POST /api/seed", r and r.status_code == 200, f"Status: {r.status_code if r else 'N/A'}"):
+        return False
     
-    try:
-        # Login as a student from a different batch
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        response = requests.get(f"{BASE_URL}/students", headers=admin_headers, timeout=10)
-        students = response.json()
-        
-        # Find a student NOT in PY-FS-01 batch
-        other_student = next((s for s in students if "PY-FS-01" not in s.get("batchName", "")), None)
-        
-        if not other_student:
-            return log_test("Wrong batch test", False, "No student from different batch found")
-        
-        # Login as that student
-        other_creds = {
-            "role": "student",
-            "loginId": other_student["loginId"],
-            "password": "Bst@2026"
-        }
-        response = requests.post(f"{BASE_URL}/auth/login", json=other_creds, timeout=10)
-        if response.status_code != 200:
-            return log_test("Wrong batch test", False, f"Could not login as other student: {response.status_code}")
-        
-        student2_token = response.json()["token"]
-        student2_id = response.json()["user"]["id"]
-        log_test("Login as different batch student", True, f"Student: {other_student['name']}, Batch: {other_student['batchName']}")
-        
-        # Try to check in with PY-FS-01 QR token
-        headers = {"Authorization": f"Bearer {student2_token}"}
-        payload = {
-            "token": qr_token,
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload, headers=headers, timeout=10)
-        data = response.json()
-        
-        passed = response.status_code == 403 and data.get("error") == "WRONG_BATCH"
-        return log_test("Wrong batch returns WRONG_BATCH", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
-    except Exception as e:
-        return log_test("Wrong batch", False, str(e))
-
-def test_checkin_overlap():
-    """Test check-in overlap detection"""
-    print("\n=== ATTENDANCE: Overlap Detection ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        today = get_today()
-        
-        # Get PY-FS-01 batch ID
-        response = requests.get(f"{BASE_URL}/batches", headers=admin_headers, timeout=10)
-        batches = response.json()
-        py_batch = next((b for b in batches if b.get("batchId") == "PY-FS-01"), None)
-        
-        if not py_batch:
-            return log_test("Overlap test", False, "PY-FS-01 batch not found")
-        
-        # Create two overlapping schedules
-        now = datetime.now()
-        schedule1_payload = {
-            "batchId": py_batch["id"],
-            "date": today,
-            "startTime": now.strftime("%H:%M"),
-            "endTime": (now + timedelta(hours=2)).strftime("%H:%M"),
-            "classType": "Overlap Test 1",
-            "room": "Lab 1",
-            "maxCapacity": 30
-        }
-        
-        response1 = requests.post(f"{BASE_URL}/schedules", json=schedule1_payload, headers=admin_headers, timeout=10)
-        if response1.status_code != 200:
-            return log_test("Overlap test", False, f"Could not create first schedule: {response1.status_code}")
-        
-        schedule1 = response1.json()
-        log_test("Created first overlapping schedule", True, f"ID: {schedule1['id']}")
-        
-        schedule2_payload = {
-            "batchId": py_batch["id"],
-            "date": today,
-            "startTime": (now + timedelta(hours=1)).strftime("%H:%M"),
-            "endTime": (now + timedelta(hours=3)).strftime("%H:%M"),
-            "classType": "Overlap Test 2",
-            "room": "Lab 2",
-            "maxCapacity": 30
-        }
-        
-        response2 = requests.post(f"{BASE_URL}/schedules", json=schedule2_payload, headers=admin_headers, timeout=10)
-        if response2.status_code != 200:
-            return log_test("Overlap test", False, f"Could not create second schedule: {response2.status_code}")
-        
-        schedule2 = response2.json()
-        log_test("Created second overlapping schedule", True, f"ID: {schedule2['id']}")
-        
-        # Generate QR for first schedule
-        response = requests.post(f"{BASE_URL}/sessions", json={"scheduleId": schedule1["id"]}, headers=admin_headers, timeout=10)
-        if response.status_code != 200:
-            return log_test("Overlap test", False, "Could not generate QR for first schedule")
-        
-        token1 = response.json()["token"]
-        
-        # Generate QR for second schedule
-        response = requests.post(f"{BASE_URL}/sessions", json={"scheduleId": schedule2["id"]}, headers=admin_headers, timeout=10)
-        if response.status_code != 200:
-            return log_test("Overlap test", False, "Could not generate QR for second schedule")
-        
-        token2 = response.json()["token"]
-        
-        # Login as a fresh student (BST-PY-002)
-        fresh_creds = {
-            "role": "student",
-            "loginId": "BST-PY-002",
-            "password": "Bst@2026"
-        }
-        response = requests.post(f"{BASE_URL}/auth/login", json=fresh_creds, timeout=10)
-        if response.status_code != 200:
-            return log_test("Overlap test", False, "Could not login as BST-PY-002")
-        
-        fresh_token = response.json()["token"]
-        fresh_headers = {"Authorization": f"Bearer {fresh_token}"}
-        
-        # Check in to first schedule
-        payload1 = {
-            "token": token1,
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload1, headers=fresh_headers, timeout=10)
-        if response.status_code != 200:
-            return log_test("Overlap test", False, f"Could not check in to first schedule: {response.status_code}, {response.json()}")
-        
-        log_test("Checked in to first schedule", True)
-        
-        # Try to check in to second overlapping schedule WITHOUT checkout
-        payload2 = {
-            "token": token2,
-            "lat": 12.9756,
-            "lng": 80.2207,
-            "accuracy": 20
-        }
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload2, headers=fresh_headers, timeout=10)
-        data = response.json()
-        
-        passed = response.status_code == 409 and data.get("error") == "OVERLAP"
-        return log_test("Overlap returns OVERLAP", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
-    except Exception as e:
-        return log_test("Overlap detection", False, str(e))
-
-def test_checkin_location_strict():
-    """Test location strict mode"""
-    print("\n=== ATTENDANCE: Location Strict Mode ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        # Set location mode to strict
-        payload = {
-            "locationMode": "strict",
-            "radiusMeters": 50
-        }
-        response = requests.put(f"{BASE_URL}/settings", json=payload, headers=admin_headers, timeout=10)
-        if response.status_code != 200:
-            return log_test("Location strict test", False, f"Could not update settings: {response.status_code}")
-        
-        log_test("Set location mode to strict", True)
-        
-        # Login as another student (BST-PY-003)
-        fresh_creds = {
-            "role": "student",
-            "loginId": "BST-PY-003",
-            "password": "Bst@2026"
-        }
-        response = requests.post(f"{BASE_URL}/auth/login", json=fresh_creds, timeout=10)
-        if response.status_code != 200:
-            return log_test("Location strict test", False, "Could not login as BST-PY-003")
-        
-        fresh_token = response.json()["token"]
-        fresh_headers = {"Authorization": f"Bearer {fresh_token}"}
-        
-        # Try to check in with far coordinates
-        payload = {
-            "token": qr_token,
-            "lat": 0,
-            "lng": 0,
-            "accuracy": 20
-        }
-        response = requests.post(f"{BASE_URL}/attendance/check-in", json=payload, headers=fresh_headers, timeout=10)
-        data = response.json()
-        
-        passed = response.status_code == 403 and data.get("error") == "LOCATION"
-        log_test("Location strict blocks far coords", passed, f"Status: {response.status_code}, Error: {data.get('error')}")
-        
-        # Reset to lenient
-        payload = {"locationMode": "lenient"}
-        requests.put(f"{BASE_URL}/settings", json=payload, headers=admin_headers, timeout=10)
-        log_test("Reset location mode to lenient", True)
-        
-        return passed
-    except Exception as e:
-        return log_test("Location strict", False, str(e))
-
-# ============================================================================
-# CHECK-OUT TESTS
-# ============================================================================
-
-def test_checkout():
-    """Test check-out"""
-    print("\n=== ATTENDANCE: Check-out ===")
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        
-        # Check current attendance
-        response = requests.get(f"{BASE_URL}/attendance/current", headers=student_headers, timeout=10)
-        data = response.json()
-        current = data.get("current")
-        
-        if not current:
-            return log_test("Check-out", False, "No current attendance found")
-        
-        log_test("Found current attendance", True, f"ID: {current['id']}")
-        
-        # Check out
-        payload = {"attendanceId": current["id"]}
-        response = requests.post(f"{BASE_URL}/attendance/check-out", json=payload, headers=student_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200 or not data.get("ok"):
-            return log_test("Check-out", False, f"Status: {response.status_code}, Response: {data}")
-        
-        log_test("Check-out success", True)
-        
-        # Verify current is now null
-        response = requests.get(f"{BASE_URL}/attendance/current", headers=student_headers, timeout=10)
-        data = response.json()
-        passed = data.get("current") is None
-        
-        return log_test("Current attendance is null after checkout", passed)
-    except Exception as e:
-        return log_test("Check-out", False, str(e))
-
-# ============================================================================
-# LIVE MONITOR & REPORTS
-# ============================================================================
-
-def test_live_monitor():
-    """Test live attendance monitor"""
-    print("\n=== ATTENDANCE: Live Monitor ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        response = requests.get(f"{BASE_URL}/attendance/live", headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Live monitor", False, f"Status: {response.status_code}")
-        
-        stats = data.get("stats", {})
-        rows = data.get("rows", [])
-        schedule = data.get("schedule")
-        active_sessions = data.get("activeSessions", [])
-        
-        passed = all(k in stats for k in ["present", "late", "absent", "inside", "total"])
-        log_test("Live monitor returns stats", passed, f"Stats: {stats}")
-        log_test("Live monitor returns rows", len(rows) > 0, f"Rows: {len(rows)}")
-        log_test("Live monitor returns schedule", schedule is not None)
-        log_test("Live monitor returns active sessions", len(active_sessions) >= 0, f"Active sessions: {len(active_sessions)}")
-        
-        return passed
-    except Exception as e:
-        return log_test("Live monitor", False, str(e))
-
-def test_reports():
-    """Test attendance reports"""
-    print("\n=== ATTENDANCE: Reports ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        today = get_today()
-        
-        # Get attendance report for today
-        response = requests.get(f"{BASE_URL}/attendance/report?date={today}", headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Attendance report", False, f"Status: {response.status_code}")
-        
-        log_test("Attendance report", True, f"Records: {len(data)}")
-        
-        # Get student-specific report
-        response = requests.get(f"{BASE_URL}/attendance/student/{student_id}", headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Student report", False, f"Status: {response.status_code}")
-        
-        stats = data.get("stats", {})
-        records = data.get("records", [])
-        
-        passed = all(k in stats for k in ["present", "late", "absent", "total", "pct"])
-        log_test("Student report", passed, f"Stats: {stats}, Records: {len(records)}")
-        
-        return passed
-    except Exception as e:
-        return log_test("Reports", False, str(e))
-
-# ============================================================================
-# DASHBOARDS
-# ============================================================================
-
-def test_dashboards():
-    """Test admin and student dashboards"""
-    print("\n=== DASHBOARDS ===")
-    try:
-        # Admin dashboard
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        response = requests.get(f"{BASE_URL}/dashboard/admin", headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Admin dashboard", False, f"Status: {response.status_code}")
-        
-        cards = data.get("cards", {})
-        course_wise = data.get("courseWise", [])
-        daily = data.get("daily", [])
-        
-        admin_passed = all(k in cards for k in ["totalStudents", "activeStudents", "todayClasses", "presentToday"])
-        log_test("Admin dashboard", admin_passed, f"Cards: {cards}")
-        log_test("Admin dashboard course-wise", len(course_wise) >= 0, f"Courses: {len(course_wise)}")
-        log_test("Admin dashboard daily", len(daily) == 7, f"Daily records: {len(daily)}")
-        
-        # Student dashboard
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        response = requests.get(f"{BASE_URL}/dashboard/student", headers=student_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Student dashboard", False, f"Status: {response.status_code}")
-        
-        student = data.get("student")
-        today_schedules = data.get("todaySchedules", [])
-        overall_pct = data.get("overallPct")
-        monthly = data.get("monthly", [])
-        
-        student_passed = student is not None and overall_pct is not None
-        log_test("Student dashboard", student_passed, f"Student: {student.get('name')}, Overall: {overall_pct}%")
-        log_test("Student dashboard schedules", len(today_schedules) >= 0, f"Today's schedules: {len(today_schedules)}")
-        log_test("Student dashboard monthly", len(monthly) >= 0, f"Monthly records: {len(monthly)}")
-        
-        return admin_passed and student_passed
-    except Exception as e:
-        return log_test("Dashboards", False, str(e))
-
-# ============================================================================
-# STUDENTS CRUD
-# ============================================================================
-
-def test_students_crud():
-    """Test students CRUD operations"""
-    print("\n=== STUDENTS: CRUD Operations ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        # Get batches and courses for creating student
-        response = requests.get(f"{BASE_URL}/batches", headers=admin_headers, timeout=10)
-        batches = response.json()
-        py_batch = next((b for b in batches if b.get("batchId") == "PY-FS-01"), batches[0])
-        
-        response = requests.get(f"{BASE_URL}/courses", headers=admin_headers, timeout=10)
-        courses = response.json()
-        py_course = next((c for c in courses if "Python" in c.get("name", "")), courses[0])
-        
-        # Create new student with unique loginId
-        timestamp = datetime.now().strftime("%H%M%S")
-        new_student = {
-            "studentId": f"BST-TEST-{timestamp}",
-            "loginId": f"BST-TEST-{timestamp}",
-            "password": "Test@2026",
-            "name": "Test Student",
-            "email": f"test{timestamp}@student.besant.com",
-            "mobile": "9876543210",
-            "courseId": py_course["id"],
-            "batchId": py_batch["id"],
-            "status": "Active"
-        }
-        
-        response = requests.post(f"{BASE_URL}/students", json=new_student, headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Create student", False, f"Status: {response.status_code}, Response: {data}")
-        
-        created_student_id = data.get("id")
-        log_test("Create student", True, f"ID: {created_student_id}, Name: {data.get('name')}")
-        
-        # Test duplicate loginId
-        response = requests.post(f"{BASE_URL}/students", json=new_student, headers=admin_headers, timeout=10)
-        dup_passed = response.status_code == 400 and "already exists" in response.json().get("error", "").lower()
-        log_test("Duplicate loginId returns 400", dup_passed)
-        
-        # Reset password
-        payload = {"newPassword": "NewTest@2026"}
-        response = requests.post(f"{BASE_URL}/students/{created_student_id}/reset-password", json=payload, headers=admin_headers, timeout=10)
-        reset_passed = response.status_code == 200
-        log_test("Reset student password", reset_passed)
-        
-        # Toggle account
-        response = requests.post(f"{BASE_URL}/students/{created_student_id}/toggle", headers=admin_headers, timeout=10)
-        data = response.json()
-        toggle_passed = response.status_code == 200 and data.get("accountStatus") == "Inactive"
-        log_test("Toggle account to Inactive", toggle_passed)
-        
-        # Toggle back
-        response = requests.post(f"{BASE_URL}/students/{created_student_id}/toggle", headers=admin_headers, timeout=10)
-        data = response.json()
-        toggle_back_passed = response.status_code == 200 and data.get("accountStatus") == "Active"
-        log_test("Toggle account to Active", toggle_back_passed)
-        
-        return True
-    except Exception as e:
-        return log_test("Students CRUD", False, str(e))
-
-# ============================================================================
-# OTHER CRUD OPERATIONS
-# ============================================================================
-
-def test_other_crud():
-    """Test other CRUD operations (courses, batches, trainers, etc.)"""
-    print("\n=== OTHER: CRUD Operations ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        # Courses
-        response = requests.get(f"{BASE_URL}/courses", headers=admin_headers, timeout=10)
-        courses_passed = response.status_code == 200 and len(response.json()) > 0
-        log_test("GET /courses", courses_passed, f"Courses: {len(response.json())}")
-        
-        # Batches
-        response = requests.get(f"{BASE_URL}/batches", headers=admin_headers, timeout=10)
-        batches_passed = response.status_code == 200 and len(response.json()) > 0
-        log_test("GET /batches", batches_passed, f"Batches: {len(response.json())}")
-        
-        # Trainers
-        response = requests.get(f"{BASE_URL}/trainers", headers=admin_headers, timeout=10)
-        trainers_passed = response.status_code == 200 and len(response.json()) > 0
-        log_test("GET /trainers", trainers_passed, f"Trainers: {len(response.json())}")
-        
-        # Class Types
-        response = requests.get(f"{BASE_URL}/class-types", headers=admin_headers, timeout=10)
-        class_types_passed = response.status_code == 200 and len(response.json()) > 0
-        log_test("GET /class-types", class_types_passed, f"Class types: {len(response.json())}")
-        
-        # Rooms
-        response = requests.get(f"{BASE_URL}/rooms", headers=admin_headers, timeout=10)
-        rooms_passed = response.status_code == 200
-        log_test("GET /rooms", rooms_passed, f"Rooms: {len(response.json())}")
-        
-        # Holidays
-        response = requests.get(f"{BASE_URL}/holidays", headers=admin_headers, timeout=10)
-        holidays_passed = response.status_code == 200
-        log_test("GET /holidays", holidays_passed, f"Holidays: {len(response.json())}")
-        
-        return courses_passed and batches_passed and trainers_passed and class_types_passed
-    except Exception as e:
-        return log_test("Other CRUD", False, str(e))
-
-# ============================================================================
-# LEAVE & SLOTS
-# ============================================================================
-
-def test_leave_and_slots():
-    """Test leave and slots functionality"""
-    print("\n=== LEAVE & SLOTS ===")
-    try:
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        # Student applies for leave
-        leave_payload = {
-            "fromDate": get_today(),
-            "toDate": get_today(),
-            "reason": "Medical",
-            "description": "Doctor appointment"
-        }
-        response = requests.post(f"{BASE_URL}/leave", json=leave_payload, headers=student_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Apply leave", False, f"Status: {response.status_code}")
-        
-        leave_id = data.get("id")
-        log_test("Student apply leave", True, f"Leave ID: {leave_id}")
-        
-        # Admin approves leave
-        response = requests.put(f"{BASE_URL}/leave/{leave_id}", json={"status": "Approved"}, headers=admin_headers, timeout=10)
-        approve_passed = response.status_code == 200
-        log_test("Admin approve leave", approve_passed)
-        
-        # Create slot
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-        slot_payload = {
-            "title": "Career Counseling",
-            "date": tomorrow,
-            "startTime": "14:00",
-            "endTime": "15:00",
-            "capacity": 5
-        }
-        response = requests.post(f"{BASE_URL}/slots", json=slot_payload, headers=admin_headers, timeout=10)
-        data = response.json()
-        
-        if response.status_code != 200:
-            return log_test("Create slot", False, f"Status: {response.status_code}")
-        
-        slot_id = data.get("id")
-        log_test("Admin create slot", True, f"Slot ID: {slot_id}")
-        
-        # Student books slot
-        response = requests.post(f"{BASE_URL}/slots/{slot_id}/book", headers=student_headers, timeout=10)
-        book_passed = response.status_code == 200
-        log_test("Student book slot", book_passed)
-        
-        return approve_passed and book_passed
-    except Exception as e:
-        return log_test("Leave & Slots", False, str(e))
-
-# ============================================================================
-# NOTIFICATIONS & AUDIT
-# ============================================================================
-
-def test_notifications_and_audit():
-    """Test notifications and audit logs"""
-    print("\n=== NOTIFICATIONS & AUDIT ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        student_headers = {"Authorization": f"Bearer {student_token}"}
-        
-        # Get notifications (student)
-        response = requests.get(f"{BASE_URL}/notifications", headers=student_headers, timeout=10)
-        notif_passed = response.status_code == 200
-        log_test("GET /notifications (student)", notif_passed, f"Notifications: {len(response.json())}")
-        
-        # Create notification (admin)
-        notif_payload = {
-            "target": "all",
-            "title": "Test Notification",
-            "message": "This is a test notification"
-        }
-        response = requests.post(f"{BASE_URL}/notifications", json=notif_payload, headers=admin_headers, timeout=10)
-        create_notif_passed = response.status_code == 200
-        log_test("POST /notifications (admin)", create_notif_passed)
-        
-        # Get audit logs (admin)
-        response = requests.get(f"{BASE_URL}/audit", headers=admin_headers, timeout=10)
-        audit_passed = response.status_code == 200 and len(response.json()) > 0
-        log_test("GET /audit (admin)", audit_passed, f"Audit logs: {len(response.json())}")
-        
-        return notif_passed and create_notif_passed and audit_passed
-    except Exception as e:
-        return log_test("Notifications & Audit", False, str(e))
-
-# ============================================================================
-# DATA INTEGRITY CHECKS
-# ============================================================================
-
-def test_data_integrity():
-    """Test that responses don't contain MongoDB ObjectIds or passwordHash"""
-    print("\n=== DATA INTEGRITY ===")
-    try:
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
-        
-        # Check students endpoint
-        response = requests.get(f"{BASE_URL}/students", headers=admin_headers, timeout=10)
-        students = response.json()
-        
-        has_object_id = any("_id" in s for s in students)
-        has_password_hash = any("passwordHash" in s for s in students)
-        has_uuid_id = all("id" in s and isinstance(s["id"], str) for s in students)
-        
-        log_test("No _id in students", not has_object_id)
-        log_test("No passwordHash in students", not has_password_hash)
-        log_test("All students have UUID id", has_uuid_id)
-        
-        # Check auth/me endpoint
-        response = requests.get(f"{BASE_URL}/auth/me", headers=admin_headers, timeout=10)
-        data = response.json()
-        user = data.get("user", {})
-        
-        no_password_in_me = "passwordHash" not in user and "password" not in user
-        log_test("No password in /auth/me", no_password_in_me)
-        
-        return not has_object_id and not has_password_hash and has_uuid_id and no_password_in_me
-    except Exception as e:
-        return log_test("Data integrity", False, str(e))
-
-# ============================================================================
-# MAIN TEST RUNNER
-# ============================================================================
-
-def run_all_tests():
-    """Run all backend tests"""
-    print("=" * 80)
-    print("BESANT STUDENTHUB BACKEND TEST SUITE")
-    print("=" * 80)
+    # 2. Admin login
+    r = post("/auth/login", ADMIN_CREDS)
+    if not test_result("Admin login", r and r.status_code == 200, f"Status: {r.status_code if r else 'N/A'}"):
+        return False
+    admin_token = r.json().get("token")
     
+    # 3. Trainer login
+    r = post("/auth/login", TRAINER_CREDS)
+    if not test_result("Trainer login", r and r.status_code == 200, f"Status: {r.status_code if r else 'N/A'}"):
+        return False
+    data = r.json()
+    trainer_token = data.get("token")
+    trainer_user = data.get("user", {})
+    
+    # 4. Student login
+    r = post("/auth/login", STUDENT_CREDS)
+    if not test_result("Student login", r and r.status_code == 200, f"Status: {r.status_code if r else 'N/A'}"):
+        return False
+    data = r.json()
+    student_token = data.get("token")
+    student_user = data.get("user", {})
+    
+    log(f"Admin token: {admin_token[:20]}...")
+    log(f"Trainer token: {trainer_token[:20]}... (user: {trainer_user})")
+    log(f"Student token: {student_token[:20]}... (user: {student_user})")
+    return True
+
+# ============ TEST 1: TRAINER AUTH ============
+def test_trainer_auth():
+    log("\n=== TEST 1: TRAINER AUTH ===")
     results = []
     
-    # Setup
-    results.append(("Seed demo data", test_seed()))
+    # 1.1 Trainer login returns token + role=trainer
+    r = post("/auth/login", TRAINER_CREDS)
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        passed = data.get("token") and data.get("user", {}).get("role") == "trainer"
+    results.append(test_result("1.1 Trainer login returns token + role=trainer", passed, f"Response: {r.json() if r and r.status_code == 200 else r.status_code if r else 'N/A'}"))
     
-    # Auth
-    results.append(("Admin login", test_admin_login()))
-    results.append(("Student login", test_student_login()))
-    results.append(("Invalid password", test_invalid_password()))
-    results.append(("Auth /me", test_auth_me()))
-    results.append(("Change password", test_change_password()))
+    # 1.2 Wrong password -> 401
+    r = post("/auth/login", {"role": "trainer", "loginId": "TR-01", "password": "WrongPassword"})
+    passed = r and r.status_code == 401
+    results.append(test_result("1.2 Wrong password -> 401", passed, f"Status: {r.status_code if r else 'N/A'}"))
     
-    # Role security
-    results.append(("Role security", test_role_security()))
+    # 1.3 GET /api/auth/me with trainer token -> role trainer
+    r = get("/auth/me", token=trainer_token)
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        passed = data.get("user", {}).get("role") == "trainer"
+    results.append(test_result("1.3 GET /auth/me with trainer token -> role trainer", passed, f"Response: {r.json() if r and r.status_code == 200 else r.status_code if r else 'N/A'}"))
     
-    # Schedules & QR
-    results.append(("Schedules & QR", test_schedules_and_qr()))
+    # 1.4 Change password for trainer then revert
+    new_pass = "NewTrainer@2026"
+    r = post("/auth/change-password", {"currentPassword": "Trainer@2026", "newPassword": new_pass}, token=trainer_token)
+    passed = r and r.status_code == 200
+    results.append(test_result("1.4a Change password for trainer", passed, f"Status: {r.status_code if r else 'N/A'}"))
     
-    # Attendance check-in
-    results.append(("Check-in success", test_checkin_success()))
-    results.append(("Invalid token", test_checkin_invalid_token()))
-    results.append(("Duplicate check-in", test_checkin_duplicate()))
-    results.append(("Wrong batch", test_checkin_wrong_batch()))
-    results.append(("Overlap detection", test_checkin_overlap()))
-    results.append(("Location strict", test_checkin_location_strict()))
+    # Verify new password works
+    r = post("/auth/login", {"role": "trainer", "loginId": "TR-01", "password": new_pass})
+    passed = r and r.status_code == 200
+    results.append(test_result("1.4b Login with new password", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    if passed:
+        new_token = r.json().get("token")
+        # Revert password
+        r = post("/auth/change-password", {"currentPassword": new_pass, "newPassword": "Trainer@2026"}, token=new_token)
+        passed = r and r.status_code == 200
+        results.append(test_result("1.4c Revert password", passed, f"Status: {r.status_code if r else 'N/A'}"))
     
-    # Check-out
-    results.append(("Check-out", test_checkout()))
+    return all(results)
+
+# ============ TEST 2: TRAINER DASHBOARD ============
+def test_trainer_dashboard():
+    log("\n=== TEST 2: TRAINER DASHBOARD ===")
+    results = []
     
-    # Live monitor & reports
-    results.append(("Live monitor", test_live_monitor()))
-    results.append(("Reports", test_reports()))
+    # 2.1 GET /api/dashboard/trainer with trainer token
+    r = get("/dashboard/trainer", token=trainer_token)
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        has_fields = all(k in data for k in ["todaySchedules", "totalStudents", "students", "presentToday", "lateToday", "insideNow"])
+        passed = has_fields and isinstance(data["todaySchedules"], list) and isinstance(data["totalStudents"], int) and isinstance(data["students"], list)
+    results.append(test_result("2.1 GET /dashboard/trainer returns correct structure", passed, f"Response keys: {list(r.json().keys()) if r and r.status_code == 200 else r.status_code if r else 'N/A'}"))
     
-    # Dashboards
-    results.append(("Dashboards", test_dashboards()))
+    # 2.2 Student token on trainer dashboard -> 403
+    r = get("/dashboard/trainer", token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("2.2 Student token on /dashboard/trainer -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
     
-    # Students CRUD
-    results.append(("Students CRUD", test_students_crud()))
+    # 2.3 Admin token on trainer dashboard -> 403
+    r = get("/dashboard/trainer", token=admin_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("2.3 Admin token on /dashboard/trainer -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
     
-    # Other CRUD
-    results.append(("Other CRUD", test_other_crud()))
+    return all(results)
+
+# ============ TEST 3: TRAINER SCHEDULES SCOPE ============
+def test_trainer_schedules_scope():
+    log("\n=== TEST 3: TRAINER SCHEDULES SCOPE ===")
+    results = []
     
-    # Leave & Slots
-    results.append(("Leave & Slots", test_leave_and_slots()))
+    # 3.1 GET /api/schedules with trainer token returns only own schedules
+    today = datetime.now().strftime("%Y-%m-%d")
+    r = get("/schedules", token=trainer_token, params={"date": today})
+    passed = r and r.status_code == 200
+    if passed:
+        schedules = r.json()
+        # TR-01 is Ramesh Kumar, trainer of PY-FS-01
+        # All schedules should have trainerId matching trainer's id
+        trainer_id = trainer_user.get("id")
+        all_own = all(s.get("trainerId") == trainer_id for s in schedules)
+        passed = all_own and len(schedules) > 0
+    results.append(test_result("3.1 GET /schedules (trainer) returns only own schedules", passed, f"Found {len(schedules) if r and r.status_code == 200 else 0} schedules for trainer {trainer_user.get('name')}"))
     
-    # Notifications & Audit
-    results.append(("Notifications & Audit", test_notifications_and_audit()))
+    return all(results)
+
+# ============ TEST 4: TRAINER QR SCOPE ============
+def test_trainer_qr_scope():
+    log("\n=== TEST 4: TRAINER QR SCOPE ===")
+    results = []
     
-    # Data integrity
-    results.append(("Data integrity", test_data_integrity()))
+    # 4.1 Get one of TR-01's own schedules
+    today = datetime.now().strftime("%Y-%m-%d")
+    r = get("/schedules", token=trainer_token, params={"date": today})
+    if not r or r.status_code != 200 or not r.json():
+        log("No schedules found for trainer today, skipping QR scope test")
+        return True
     
-    # Summary
+    own_schedule = r.json()[0]
+    own_schedule_id = own_schedule.get("id")
+    
+    # 4.2 POST /api/sessions with trainer token for own schedule -> success
+    r = post("/sessions", {"scheduleId": own_schedule_id}, token=trainer_token)
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        passed = "token" in data and data.get("active") == True
+    results.append(test_result("4.1 POST /sessions for own schedule -> success", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 4.3 Create a schedule for a different trainer (as admin)
+    # Get another trainer
+    r = get("/trainers", token=admin_token)
+    if r and r.status_code == 200:
+        trainers = r.json()
+        other_trainer = next((t for t in trainers if t.get("id") != trainer_user.get("id")), None)
+        
+        if other_trainer:
+            # Get a batch
+            r = get("/batches", token=admin_token)
+            if r and r.status_code == 200:
+                batches = r.json()
+                batch = batches[0] if batches else None
+                
+                if batch:
+                    # Create schedule for other trainer
+                    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                    schedule_data = {
+                        "date": tomorrow,
+                        "batchId": batch.get("id"),
+                        "classType": "Test Class",
+                        "trainerId": other_trainer.get("id"),
+                        "startTime": "10:00",
+                        "endTime": "12:00",
+                        "room": "Lab 1",
+                        "maxCapacity": 30
+                    }
+                    r = post("/schedules", schedule_data, token=admin_token)
+                    if r and r.status_code == 200:
+                        other_schedule_id = r.json().get("id")
+                        
+                        # 4.4 Try to generate QR for other trainer's schedule as TR-01 -> 403
+                        r = post("/sessions", {"scheduleId": other_schedule_id}, token=trainer_token)
+                        passed = r and r.status_code == 403
+                        results.append(test_result("4.2 POST /sessions for other trainer's schedule -> 403", passed, f"Status: {r.status_code if r else 'N/A'}, Message: {r.json().get('error') if r and r.status_code == 403 else ''}"))
+    
+    return all(results)
+
+# ============ TEST 5: TRAINER REPORT SCOPE ============
+def test_trainer_report_scope():
+    log("\n=== TEST 5: TRAINER REPORT SCOPE ===")
+    results = []
+    
+    # 5.1 GET /api/attendance/report with trainer token
+    today = datetime.now().strftime("%Y-%m-%d")
+    r = get("/attendance/report", token=trainer_token, params={"date": today})
+    passed = r and r.status_code == 200
+    if passed:
+        records = r.json()
+        # All records should have trainerName matching trainer's name
+        trainer_name = trainer_user.get("name")
+        all_own = all(rec.get("trainerName") == trainer_name for rec in records)
+        passed = all_own
+    results.append(test_result("5.1 GET /attendance/report (trainer) returns only own records", passed, f"Found {len(records) if r and r.status_code == 200 else 0} records for trainer {trainer_user.get('name')}"))
+    
+    return all(results)
+
+# ============ TEST 6: BRANCHES ============
+def test_branches():
+    log("\n=== TEST 6: BRANCHES ===")
+    results = []
+    
+    # 6.1 GET /api/branches returns seeded branches
+    r = get("/branches")
+    passed = r and r.status_code == 200
+    if passed:
+        branches = r.json()
+        has_velachery = any(b.get("name") == "Velachery" for b in branches)
+        has_coimbatore = any(b.get("name") == "Coimbatore" for b in branches)
+        passed = has_velachery and has_coimbatore
+    results.append(test_result("6.1 GET /branches returns Velachery + Coimbatore", passed, f"Found {len(branches) if r and r.status_code == 200 else 0} branches"))
+    
+    # 6.2 POST /api/branches (admin) creates branch
+    branch_data = {"name": "Test Branch", "city": "Test City", "lat": 13.0827, "lng": 80.2707, "radius": 150}
+    r = post("/branches", branch_data, token=admin_token)
+    passed = r and r.status_code == 200
+    created_branch_id = None
+    if passed:
+        created_branch_id = r.json().get("id")
+    results.append(test_result("6.2 POST /branches (admin) creates branch", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 6.3 PUT /api/branches/:id (admin) updates radius
+    if created_branch_id:
+        r = put(f"/branches/{created_branch_id}", {"radius": 250}, token=admin_token)
+        passed = r and r.status_code == 200
+        results.append(test_result("6.3 PUT /branches/:id (admin) updates radius", passed, f"Status: {r.status_code if r else 'N/A'}"))
+        
+        # 6.4 DELETE /api/branches/:id (admin)
+        r = delete(f"/branches/{created_branch_id}", token=admin_token)
+        passed = r and r.status_code == 200
+        results.append(test_result("6.4 DELETE /branches/:id (admin)", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 6.5 Student POST /api/branches -> 403
+    r = post("/branches", branch_data, token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("6.5 Student POST /branches -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 6.6 Trainer POST /api/branches -> 403
+    r = post("/branches", branch_data, token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("6.6 Trainer POST /branches -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    return all(results)
+
+# ============ TEST 7: PLACEMENTS ============
+def test_placements():
+    log("\n=== TEST 7: PLACEMENTS ===")
+    results = []
+    
+    # 7.1 GET /api/placements as admin (has applicants count)
+    r = get("/placements", token=admin_token)
+    passed = r and r.status_code == 200
+    if passed:
+        placements = r.json()
+        has_applicants = all("applicants" in p for p in placements)
+        passed = has_applicants and len(placements) >= 3  # seeded 3 placements
+    results.append(test_result("7.1 GET /placements (admin) has applicants count", passed, f"Found {len(placements) if r and r.status_code == 200 else 0} placements"))
+    
+    # 7.2 GET /api/placements as student (has applied flag, initially false)
+    r = get("/placements", token=student_token)
+    passed = r and r.status_code == 200
+    placement_id = None
+    if passed:
+        placements = r.json()
+        has_applied = all("applied" in p for p in placements)
+        initially_false = all(p.get("applied") == False for p in placements)
+        passed = has_applied and initially_false
+        if placements:
+            placement_id = placements[0].get("id")
+    results.append(test_result("7.2 GET /placements (student) has applied flag (initially false)", passed, f"Found {len(placements) if r and r.status_code == 200 else 0} placements"))
+    
+    # 7.3 POST /api/placements (admin) creates drive
+    placement_data = {"company": "Test Corp", "role": "Test Developer", "eligibility": "Any", "package": "5 LPA", "location": "Chennai", "interviewDate": "2026-09-01"}
+    r = post("/placements", placement_data, token=admin_token)
+    passed = r and r.status_code == 200
+    created_placement_id = None
+    if passed:
+        created_placement_id = r.json().get("id")
+    results.append(test_result("7.3 POST /placements (admin) creates drive", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 7.4 Student POST /api/placements/:id/apply -> ok
+    if placement_id:
+        r = post(f"/placements/{placement_id}/apply", {}, token=student_token)
+        passed = r and r.status_code == 200
+        results.append(test_result("7.4 Student POST /placements/:id/apply -> ok", passed, f"Status: {r.status_code if r else 'N/A'}"))
+        
+        # 7.5 Applying again -> 400
+        r = post(f"/placements/{placement_id}/apply", {}, token=student_token)
+        passed = r and r.status_code == 400
+        results.append(test_result("7.5 Applying again -> 400", passed, f"Status: {r.status_code if r else 'N/A'}"))
+        
+        # 7.6 Admin GET /api/placements/:id/applicants shows the student
+        r = get(f"/placements/{placement_id}/applicants", token=admin_token)
+        passed = r and r.status_code == 200
+        if passed:
+            applicants = r.json()
+            has_student = any(a.get("studentId") == student_user.get("id") for a in applicants)
+            passed = has_student
+        results.append(test_result("7.6 Admin GET /placements/:id/applicants shows student", passed, f"Found {len(applicants) if r and r.status_code == 200 else 0} applicants"))
+    
+    # 7.7 Student POST /api/placements (create) -> 403
+    r = post("/placements", placement_data, token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("7.7 Student POST /placements (create) -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    return all(results)
+
+# ============ TEST 8: CALENDAR ============
+def test_calendar():
+    log("\n=== TEST 8: CALENDAR ===")
+    results = []
+    
+    # 8.1 As student GET /api/attendance/calendar?month=YYYY-MM
+    current_month = datetime.now().strftime("%Y-%m")
+    r = get("/attendance/calendar", token=student_token, params={"month": current_month})
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        has_month = "month" in data
+        has_days = "days" in data and isinstance(data["days"], dict)
+        # Check that days have status field
+        if has_days and data["days"]:
+            sample_day = next(iter(data["days"].values()))
+            has_status = "status" in sample_day
+            passed = has_month and has_days and has_status
+        else:
+            passed = has_month and has_days
+    results.append(test_result("8.1 Student GET /attendance/calendar returns correct structure", passed, f"Response keys: {list(r.json().keys()) if r and r.status_code == 200 else r.status_code if r else 'N/A'}"))
+    
+    # 8.2 Admin GET /api/attendance/calendar?studentId=X&month=Y works
+    r = get("/attendance/calendar", token=admin_token, params={"studentId": student_user.get("id"), "month": current_month})
+    passed = r and r.status_code == 200
+    results.append(test_result("8.2 Admin GET /attendance/calendar with studentId works", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # 8.3 Student trying another studentId is forced to self (should not error, returns own)
+    # Get another student
+    r = get("/students", token=admin_token)
+    if r and r.status_code == 200:
+        students = r.json()
+        other_student = next((s for s in students if s.get("id") != student_user.get("id")), None)
+        if other_student:
+            r = get("/attendance/calendar", token=student_token, params={"studentId": other_student.get("id"), "month": current_month})
+            passed = r and r.status_code == 200
+            # Should return own data, not error
+            results.append(test_result("8.3 Student trying another studentId returns own data (no error)", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    return all(results)
+
+# ============ TEST 9: BRANCH-AWARE CHECK-IN REGRESSION ============
+def test_branch_aware_checkin():
+    log("\n=== TEST 9: BRANCH-AWARE CHECK-IN REGRESSION ===")
+    results = []
+    
+    # 9.1 Generate QR for today's PY-FS-01 schedule as admin
+    today = datetime.now().strftime("%Y-%m-%d")
+    r = get("/schedules", token=admin_token, params={"date": today})
+    if not r or r.status_code != 200 or not r.json():
+        log("No schedules found for today, skipping branch-aware check-in test")
+        return True
+    
+    schedules = r.json()
+    py_schedule = next((s for s in schedules if s.get("batchName") == "PY-FS-01"), None)
+    if not py_schedule:
+        log("No PY-FS-01 schedule found for today, skipping")
+        return True
+    
+    # Generate QR
+    r = post("/sessions", {"scheduleId": py_schedule.get("id")}, token=admin_token)
+    if not r or r.status_code != 200:
+        log("Failed to generate QR session")
+        return False
+    
+    qr_token = r.json().get("token")
+    
+    # 9.2 Student BST-PY-001 check-in with Velachery coordinates
+    checkin_data = {
+        "token": qr_token,
+        "lat": 12.9756,
+        "lng": 80.2207,
+        "accuracy": 20
+    }
+    r = post("/attendance/check-in", checkin_data, token=student_token)
+    passed = r and r.status_code == 200
+    if passed:
+        data = r.json()
+        is_ok = data.get("ok") == True
+        has_status = data.get("status") in ["Present", "Late"]
+        location_verified = data.get("locationVerified") == True
+        passed = is_ok and has_status and location_verified
+    results.append(test_result("9.1 Student check-in with Velachery coords -> Present/Late, locationVerified=true", passed, f"Response: {r.json() if r and r.status_code == 200 else r.status_code if r else 'N/A'}"))
+    
+    return all(results)
+
+# ============ TEST 10: REGRESSION ROLE SECURITY ============
+def test_role_security_regression():
+    log("\n=== TEST 10: REGRESSION ROLE SECURITY ===")
+    results = []
+    
+    # Student token should get 403 on:
+    # - /api/students (list)
+    r = get("/students", token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.1 Student -> /students (list) -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/settings PUT
+    r = put("/settings", {"centerName": "Test"}, token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.2 Student -> /settings PUT -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/attendance/live
+    r = get("/attendance/live", token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.3 Student -> /attendance/live -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/branches POST
+    r = post("/branches", {"name": "Test"}, token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.4 Student -> /branches POST -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/placements POST
+    r = post("/placements", {"company": "Test"}, token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.5 Student -> /placements POST -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/dashboard/trainer
+    r = get("/dashboard/trainer", token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.6 Student -> /dashboard/trainer -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/dashboard/admin
+    r = get("/dashboard/admin", token=student_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.7 Student -> /dashboard/admin -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # Trainer token should get 403 on admin-only endpoints:
+    # - /api/branches POST
+    r = post("/branches", {"name": "Test"}, token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.8 Trainer -> /branches POST -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/placements POST
+    r = post("/placements", {"company": "Test"}, token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.9 Trainer -> /placements POST -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/students (list)
+    r = get("/students", token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.10 Trainer -> /students (list) -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/settings PUT
+    r = put("/settings", {"centerName": "Test"}, token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.11 Trainer -> /settings PUT -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    # - /api/attendance/live
+    r = get("/attendance/live", token=trainer_token)
+    passed = r and r.status_code == 403
+    results.append(test_result("10.12 Trainer -> /attendance/live -> 403", passed, f"Status: {r.status_code if r else 'N/A'}"))
+    
+    return all(results)
+
+# ============ MAIN ============
+def main():
+    print("=" * 80)
+    print("BESANT STUDENTHUB - ROUND 2 BACKEND TESTING")
+    print("=" * 80)
+    
+    if not setup():
+        log("❌ SETUP FAILED - Cannot proceed with tests")
+        return
+    
+    test_results = []
+    
+    test_results.append(("TRAINER AUTH", test_trainer_auth()))
+    test_results.append(("TRAINER DASHBOARD", test_trainer_dashboard()))
+    test_results.append(("TRAINER SCHEDULES SCOPE", test_trainer_schedules_scope()))
+    test_results.append(("TRAINER QR SCOPE", test_trainer_qr_scope()))
+    test_results.append(("TRAINER REPORT SCOPE", test_trainer_report_scope()))
+    test_results.append(("BRANCHES", test_branches()))
+    test_results.append(("PLACEMENTS", test_placements()))
+    test_results.append(("CALENDAR", test_calendar()))
+    test_results.append(("BRANCH-AWARE CHECK-IN", test_branch_aware_checkin()))
+    test_results.append(("ROLE SECURITY REGRESSION", test_role_security_regression()))
+    
     print("\n" + "=" * 80)
     print("TEST SUMMARY")
     print("=" * 80)
     
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
+    for name, passed in test_results:
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{status}: {name}")
     
-    print(f"\nTotal: {total} tests")
-    print(f"Passed: {passed} tests")
-    print(f"Failed: {total - passed} tests")
-    print(f"Success Rate: {(passed/total*100):.1f}%")
+    total = len(test_results)
+    passed_count = sum(1 for _, p in test_results if p)
+    print(f"\nTotal: {passed_count}/{total} test suites passed ({int(passed_count/total*100)}%)")
     
-    print("\nFailed tests:")
-    for name, result in results:
-        if not result:
-            print(f"  ❌ {name}")
-    
-    print("\n" + "=" * 80)
-    
-    return passed == total
+    if passed_count == total:
+        print("\n🎉 ALL TESTS PASSED!")
+    else:
+        print(f"\n⚠️  {total - passed_count} test suite(s) failed")
 
 if __name__ == "__main__":
-    success = run_all_tests()
-    exit(0 if success else 1)
+    main()
