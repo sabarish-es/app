@@ -1545,8 +1545,7 @@ function App() {
   useEffect(() => {
     const t = localStorage.getItem('bsh_token'); const u = localStorage.getItem('bsh_user')
     if (t && u) { AUTH_TOKEN = t; setToken(t); const parsed = JSON.parse(u); setUser(parsed); api('/auth/me').then(() => {}).catch(() => { logout() }) }
-    // ensure demo data seeded once
-    api('/seed', 'POST').catch(() => {})
+
     setBooting(false)
   }, [])
 
