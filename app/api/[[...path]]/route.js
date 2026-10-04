@@ -652,13 +652,15 @@ async function handleRoute(request, { params }) {
     // ---------- LEAVE ----------
     if (route === '/leave' && method === 'GET') {
       if (isAdmin) return json(cleanArr(await db.collection('leaveRequests').find({}).sort({ createdAt: -1 }).toArray()))
-      if (isStudent) return json(cleanArr(await db.collection('leaveRequests').find({ studentId: auth.id }).sort({ createdAt: -1 }).toArray()))
-      return json({ error: 'Unauthorized' }, 401)
+  if (isStudent) return json(cleanArr(await db.collection('leaveRequests').find({ studentId: auth.id }).sort({ createdAt: -1 }).toArray()))
+  if (isTrainer) return json(cleanArr(await db.collection('leaveRequests').find({ trainerId: auth.id }).sort({ createdAt: -1 }).toArray()))
+  return json({ error: 'Unauthorized' }, 401)
     }
     if (route === '/leave' && method === 'POST') {
-      if (!isStudent) return json({ error: 'Forbidden' }, 403)
-      const st = await db.collection('students').findOne({ id: auth.id })
-      const l = { id: uuidv4(), studentId: auth.id, studentName: st.name, studentCode: st.studentId, fromDate: body.fromDate, toDate: body.toDate, reason: body.reason, description: body.description || '', status: 'Pending', createdAt: new Date().toISOString() }
+  if (!isStudent && !isTrainer) return json({ error: 'Forbidden' }, 403)
+  const collection = isStudent ? 'students' : 'trainers'
+  const person = await db.collection(collection).findOne({ id: auth.id })
+  const l = { id: uuidv4(), ...(isStudent ? { studentId: auth.id, studentName: person.name, studentCode: person.studentId } : { trainerId: auth.id, trainerName: person.name, trainerCode: person.trainerId }), fromDate: body.fromDate, toDate: body.toDate, reason: body.reason, description: body.description || '', status: 'Pending', createdAt: new Date().toISOString() }
       await db.collection('leaveRequests').insertOne(l); return json(clean(l))
     }
     if (route.startsWith('/leave/') && method === 'PUT') {

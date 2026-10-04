@@ -106,18 +106,12 @@ function Logo({ light }) {
 
 /* ============================ LOGIN ============================ */
 function LoginScreen({ onLogin }) {
-  const [role, setRole] = useState('admin')
+  const role = 'admin'
   const [loginId, setLoginId] = useState('besanttech@2026')
   const [password, setPassword] = useState('besanttech@2026')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const switchRole = (r) => {
-    setRole(r)
-    if (r === 'admin') { setLoginId('besanttech@2026'); setPassword('besanttech@2026') }
-    else if (r === 'trainer') { setLoginId('TR-01'); setPassword('Trainer@2026') }
-    else { setLoginId('BST-PY-001'); setPassword('Bst@2026') }
-  }
   const submit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -158,14 +152,8 @@ function LoginScreen({ onLogin }) {
             <h2 className="text-2xl font-bold">Welcome Back</h2>
             <p className="mb-6 text-sm text-slate-500">Sign in to your Besant StudentHub account</p>
 
-            <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
-              {['admin', 'trainer', 'student'].map(r => (
-                <button key={r} onClick={() => switchRole(r)}
-                  className={`relative rounded-lg py-2.5 text-sm font-semibold capitalize transition ${role === r ? 'text-white' : 'text-slate-500'}`}>
-                  {role === r && <motion.div layoutId="roletab" className="absolute inset-0 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 shadow" />}
-                  <span className="relative flex items-center justify-center gap-1.5">{r === 'admin' ? <ShieldCheck className="h-4 w-4" /> : r === 'trainer' ? <UserCog className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}{r}</span>
-                </button>
-              ))}
+            <div className="mb-6 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
+              <ShieldCheck className="h-4 w-4" /> Administrator sign in
             </div>
 
             <form onSubmit={submit} className="space-y-4">
@@ -186,12 +174,10 @@ function LoginScreen({ onLogin }) {
             </form>
 
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-              <div className="font-semibold text-slate-600">Demo credentials</div>
-              <div className="mt-1">Admin: <b>besanttech@2026</b> / <b>besanttech@2026</b></div>
-              <div>Trainer: <b>TR-01</b> / <b>Trainer@2026</b></div>
-              <div>Student: <b>BST-PY-001</b> / <b>Bst@2026</b></div>
+              <div className="font-semibold text-slate-600">Account access</div>
+              <div className="mt-1">Administrators create trainer and student accounts and share their generated login details.</div>
             </div>
-            <p className="mt-4 text-center text-xs text-slate-400">Student registration is managed by Besant Technologies Administration.</p>
+            <p className="mt-4 text-center text-xs text-slate-400">Trainer and student access is issued by the administrator.</p>
           </motion.div>
         </div>
       </div>
@@ -1440,6 +1426,7 @@ const TRAINER_NAV = [
   { key: 'dashboard', label: 'My Classes', icon: LayoutDashboard },
   { key: 'attendance', label: 'Attendance', icon: FileBarChart },
   { key: 'students', label: 'Students', icon: Users },
+  { key: 'leave', label: 'Leave Request', icon: PlaneTakeoff },
 ]
 function TrainerApp({ user, onLogout }) {
   const [view, setView] = useState('dashboard')
@@ -1464,6 +1451,7 @@ function TrainerApp({ user, onLogout }) {
             {view === 'dashboard' && <TrainerDashboard user={user} />}
             {view === 'attendance' && <TrainerAttendance />}
             {view === 'students' && <TrainerStudents />}
+            {view === 'leave' && <TrainerLeave />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1520,6 +1508,30 @@ function TrainerAttendance() {
           <tbody className="divide-y divide-slate-100">{list.map(r => (<tr key={r.id}><td className="px-4 py-3 text-slate-500">{r.date}</td><td className="px-4 py-3 font-medium text-slate-800">{r.studentName}</td><td className="px-4 py-3">{r.classType}</td><td className="px-4 py-3">{fmtTime(r.checkInTime)}</td><td className="px-4 py-3"><StatusBadge status={r.status} /></td></tr>))}</tbody>
         </table></div></div>
       )}
+    </div>
+  )
+}
+function TrainerLeave() {
+  const [list, setList] = useState(null)
+  const [form, setForm] = useState({ fromDate: '', toDate: '', reason: '', description: '' })
+  const load = () => api('/leave').then(setList).catch(() => setList([]))
+  useEffect(() => { load() }, [])
+  const submit = async () => {
+    if (!form.fromDate || !form.reason) return toast.error('From date and reason are required')
+    try { await api('/leave', 'POST', form); toast.success('Leave request submitted'); setForm({ fromDate: '', toDate: '', reason: '', description: '' }); load() }
+    catch (e) { toast.error(e.message) }
+  }
+  return (
+    <div className="space-y-4">
+      <div><h2 className="text-lg font-bold text-slate-900">Leave Request</h2><p className="text-sm text-slate-500">Submit leave for administrator approval.</p></div>
+      <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2">
+        <Field label="From"><Input type="date" value={form.fromDate} onChange={e => setForm({ ...form, fromDate: e.target.value })} /></Field>
+        <Field label="To"><Input type="date" value={form.toDate} onChange={e => setForm({ ...form, toDate: e.target.value })} /></Field>
+        <Field label="Reason"><Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Personal leave" /></Field>
+        <Field label="Description"><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></Field>
+        <div><Button onClick={submit} className="bg-gradient-to-r from-indigo-500 to-violet-600">Submit Request</Button></div>
+      </CardContent></Card>
+      {list?.map(l => <Card key={l.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6"><div><div className="font-medium text-slate-800">{l.fromDate} → {l.toDate}</div><div className="text-sm text-slate-500">{l.reason}</div></div><StatusBadge status={l.status === 'Rejected' ? 'Rejected2' : l.status} /></CardContent></Card>)}
     </div>
   )
 }
