@@ -1585,10 +1585,26 @@ function App() {
   const [needPwd, setNeedPwd] = useState(false)
 
   useEffect(() => {
-    const t = localStorage.getItem('bsh_token'); const u = localStorage.getItem('bsh_user')
-    if (t && u) { AUTH_TOKEN = t; setToken(t); const parsed = JSON.parse(u); setUser(parsed); api('/auth/me').then(() => {}).catch(() => { logout() }) }
+    const t = localStorage.getItem('bsh_token')
+    const storedUser = localStorage.getItem('bsh_user')
 
-    setBooting(false)
+    if (!t || !storedUser) {
+      setBooting(false)
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(storedUser)
+      if (!parsed?.id || !parsed?.role) throw new Error('Invalid saved session')
+      AUTH_TOKEN = t
+      setToken(t)
+      setUser(parsed)
+      setBooting(false)
+      api('/auth/me').catch(() => logout())
+    } catch {
+      logout()
+      setBooting(false)
+    }
   }, [])
 
   const onLogin = (res) => {
