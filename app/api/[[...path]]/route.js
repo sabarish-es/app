@@ -433,6 +433,41 @@ async function handleRoute(request, { params }) {
       await audit(db, auth.id, 'Created student', 'student', st.id, `${st.name} (${st.loginId})`)
       return json(clean(st))
     }
+    if (route === '/students/bulk' && method === 'POST') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      const rows = Array.isArray(body.students) ? body.students.slice(0, 500) : []
+      if (!rows.length) return json({ error: 'At least one student is required' }, 400)
+      const existing = await db.collection('students').find({}, { projection: { loginId: 1, studentId: 1 } }).toArray()
+      const used = new Set(existing.flatMap((s) => [s.loginId, s.studentId].filter(Boolean)))
+      const created = []; const skipped = []
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index] || {}
+        const name = String(row.name || row.fullName || '').trim()
+        if (!name) { skipped.push({ row: index + 2, reason: 'Name is required' }); continue }
+        const studentId = String(row.studentId || `BST-${String(Date.now()).slice(-6)}-${String(index + 1).padStart(3, '0')}`).trim()
+        const loginId = String(row.loginId || studentId).trim()
+        if (used.has(studentId) || used.has(loginId)) { skipped.push({ row: index + 2, reason: `Duplicate ID: ${loginId}` }); continue }
+        const password = String(row.password || `Bst@${Math.floor(1000 + Math.random() * 9000)}`)
+        const course = row.courseId ? await db.collection('courses').findOne({ id: String(row.courseId) }) : null
+        const batch = row.batchId ? await db.collection('batches').findOne({ id: String(row.batchId) }) : null
+        const trainer = row.trainerId ? await db.collection('trainers').findOne({ id: String(row.trainerId) }) : (batch ? { id: batch.trainerId, name: batch.trainerName } : null)
+        const student = {
+          id: uuidv4(), studentId, loginId, passwordHash: bcrypt.hashSync(password, 8), name,
+          email: String(row.email || '').trim(), mobile: String(row.mobile || '').trim(), altMobile: '', dob: '', address: '', photo: '',
+          courseId: course?.id || row.courseId || '', courseName: course?.name || String(row.courseName || ''),
+          batchId: batch?.id || row.batchId || '', batchName: batch?.batchId || String(row.batchName || ''), batchYear: String(row.batchYear || ''),
+          enrollmentDate: String(row.enrollmentDate || todayStr()), courseStart: '', courseEnd: '', trainerId: trainer?.id, trainerName: trainer?.name,
+          status: 'Active', branchId: row.branchId || null, emergencyContact: '', emergencyNumber: '', accountStatus: 'Active',
+          requirePasswordChange: true, firstLoginCompleted: false, lastLogin: null, createdAt: new Date().toISOString(),
+        }
+        await db.collection('students').insertOne(student)
+        if (batch) await db.collection('batches').updateOne({ id: batch.id }, { $inc: { currentStudents: 1 } })
+        used.add(studentId); used.add(loginId)
+        created.push({ name, studentId, loginId, password })
+      }
+      await audit(db, auth.id, 'Bulk created students', 'student', 'bulk', `${created.length} created, ${skipped.length} skipped`)
+      return json({ created, skipped })
+    }
     if (route.startsWith('/students/') && path.length === 2 && method === 'GET') {
       const id = path[1]
       if (!isAdmin && !(isStudent && auth.id === id)) return json({ error: 'Forbidden' }, 403)

@@ -43,6 +43,19 @@ const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour:
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'
 const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening' }
 const initials = (n) => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+const parseCsv = (text) => {
+  const lines = text.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean)
+  if (lines.length < 2) return []
+  const cells = (line) => line.match(/(?:"([^"]*)")|([^,]+)/g)?.map(value => value.replace(/^"|"$/g, '').trim()) || []
+  const headers = cells(lines[0]).map(h => h.toLowerCase().replace(/\\s+/g, ''))
+  return lines.slice(1).map(line => Object.fromEntries(cells(line).map((value, index) => [headers[index], value])))
+}
+const downloadCsv = (filename, rows) => {
+  const csv = rows.map(row => row.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url)
+}
+const loginLink = (role) => `${window.location.origin}/?role=${role}`
 
 function useCountUp(target, dur = 1000) {
   const [val, setVal] = useState(0)
@@ -106,9 +119,12 @@ function Logo({ light }) {
 
 /* ============================ LOGIN ============================ */
 function LoginScreen({ onLogin }) {
-  const [role, setRole] = useState('admin')
-  const [loginId, setLoginId] = useState('besanttech@2026')
-  const [password, setPassword] = useState('besanttech@2026')
+  const requestedRole = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('role') : null
+  const initialRole = ['admin', 'trainer', 'student'].includes(requestedRole) ? requestedRole : 'admin'
+  const [role, setRole] = useState(initialRole)
+  const [allowedRole, setAllowedRole] = useState(['trainer', 'student'].includes(initialRole) ? initialRole : null)
+  const [loginId, setLoginId] = useState(initialRole === 'admin' ? 'besanttech@2026' : '')
+  const [password, setPassword] = useState(initialRole === 'admin' ? 'besanttech@2026' : '')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
   const submitting = useRef(false)
@@ -118,7 +134,19 @@ function LoginScreen({ onLogin }) {
     trainer: { loginId: '', password: '' },
     student: { loginId: '', password: '' },
   }
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('role')
+    const nextRole = ['admin', 'trainer', 'student'].includes(requested) ? requested : null
+    setAllowedRole(nextRole)
+    if (nextRole) {
+      setRole(nextRole)
+      setLoginId(roleDefaults[nextRole].loginId)
+      setPassword(roleDefaults[nextRole].password)
+    }
+  }, [])
+
   const selectRole = (nextRole) => {
+    if (allowedRole) return
     setRole(nextRole)
     setLoginId(roleDefaults[nextRole].loginId)
     setPassword(roleDefaults[nextRole].password)
@@ -166,7 +194,7 @@ function LoginScreen({ onLogin }) {
             <h2 className="text-2xl font-bold">Welcome Back</h2>
             <p className="mb-6 text-sm text-slate-500">Sign in to your Besant StudentHub account</p>
 
-            <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Choose account type">
+            {!allowedRole && <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Choose account type">
               {[
                 ['admin', 'Admin'],
                 ['trainer', 'Trainer'],
@@ -183,7 +211,7 @@ function LoginScreen({ onLogin }) {
                   {label}
                 </button>
               ))}
-            </div>
+            </div>}
 
             <div className="mb-6 flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700">
               <ShieldCheck className="h-4 w-4" /> {role === 'admin' ? 'Administrator' : role === 'trainer' ? 'Trainer' : 'Student'} sign in
@@ -433,6 +461,8 @@ function AdminStudents() {
   const [filterCourse, setFilterCourse] = useState('all'); const [filterStatus, setFilterStatus] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [detail, setDetail] = useState(null)
+  const fileRef = useRef(null)
+  const [importing, setImporting] = useState(false)
   const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', batchId: '', trainerId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
   const [form, setForm] = useState(empty)
 
@@ -460,6 +490,19 @@ function AdminStudents() {
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
+  const copyStudentLink = async () => { await navigator.clipboard.writeText(loginLink('student')); toast.success('Student login link copied') }
+  const importStudents = async (event) => {
+    const file = event.target.files?.[0]; if (!file) return
+    setImporting(true)
+    try {
+      const rows = parseCsv(await file.text())
+      const result = await api('/students/bulk', 'POST', { students: rows })
+      downloadCsv('student-login-credentials.csv', [['Name', 'Student ID', 'Login ID', 'Password'], ...result.created.map(s => [s.name, s.studentId, s.loginId, s.password])])
+      toast.success(`${result.created.length} students created. Credentials downloaded.`)
+      if (result.skipped.length) toast.error(`${result.skipped.length} rows skipped`)
+      load()
+    } catch (e) { toast.error(e.message) } finally { setImporting(false); event.target.value = '' }
+  }
 
   return (
     <div className="space-y-4">
@@ -470,6 +513,10 @@ function AdminStudents() {
         </div>
         <Select value={filterCourse} onValueChange={setFilterCourse}><SelectTrigger className="w-44"><SelectValue placeholder="Course" /></SelectTrigger><SelectContent><SelectItem value="all">All Courses</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{['all', 'Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'All Status' : s}</SelectItem>)}</SelectContent></Select>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={importStudents} />
+        <Button variant="outline" onClick={() => downloadCsv('student-template.csv', [['name', 'studentId', 'email', 'mobile', 'courseName', 'batchName'], ['Example Student', 'BST-PY-021', 'student@example.com', '9000000000', 'Python Full Stack', 'PY-FS-01']])}>Download Sheet Template</Button>
+        <Button variant="outline" disabled={importing} onClick={() => fileRef.current?.click()}>{importing ? 'Importing...' : 'Import Google Sheet CSV'}</Button>
+        <Button variant="outline" onClick={copyStudentLink}>Copy Student Login Link</Button>
         <Button onClick={() => setShowAdd(true)} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Student</Button>
       </div>
 
@@ -636,8 +683,10 @@ function AdminTrainers() {
   const add = async () => { if (!form.name) return toast.error('Name required'); try { await api('/trainers', 'POST', form); toast.success('Trainer created with login'); setForm({ name: '', email: '', mobile: '', skills: '', courses: '', loginId: '', password: 'Trainer@2026', branchId: '' }); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete trainer?')) return; await api(`/trainers/${id}`, 'DELETE'); load() }
   const resetPwd = async (t) => { const np = prompt('New password for ' + t.name, 'Trainer@2026'); if (!np) return; try { await api(`/trainers/${t.id}/reset-password`, 'POST', { newPassword: np }); toast.success('Password reset') } catch (e) { toast.error(e.message) } }
+  const copyTrainerLink = async () => { await navigator.clipboard.writeText(loginLink('trainer')); toast.success('Trainer login link copied') }
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-violet-100 bg-violet-50 p-4"><div><div className="font-semibold text-violet-900">Trainer access link</div><div className="text-sm text-violet-700">Share this link with trainers. It opens only the trainer login page.</div></div><Button variant="outline" onClick={copyTrainerLink}>Copy Trainer Login Link</Button></div>
       <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Name"><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="Email"><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
