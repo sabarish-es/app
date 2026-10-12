@@ -84,7 +84,18 @@ async function audit(db, adminId, action, entity, entityId, details = '') {
 }
 
 // ---------------- Defaults / Seed ----------------
+let defaultsPromise
 async function ensureDefaults(db) {
+  if (!defaultsPromise) {
+    defaultsPromise = ensureDefaultsInternal(db).catch((error) => {
+      defaultsPromise = null
+      throw error
+    })
+  }
+  return defaultsPromise
+}
+
+async function ensureDefaultsInternal(db) {
   const s = await db.collection('settings').findOne({ id: 'global' })
   if (!s) {
     await db.collection('settings').insertOne({
