@@ -157,7 +157,7 @@ function LoginScreen({ onLogin }) {
 
         {/* Right login card */}
         <div className="flex items-center justify-center p-6">
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5 }}
+          <motion.div initial={false} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5 }}
             className="w-full max-w-md rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-2xl backdrop-blur-xl">
             <div className="lg:hidden mb-6"><Logo /></div>
             <h2 className="text-2xl font-bold">Welcome Back</h2>
