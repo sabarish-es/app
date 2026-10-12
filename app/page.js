@@ -111,6 +111,7 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('besanttech@2026')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
+  const submitting = useRef(false)
 
   const roleDefaults = {
     admin: { loginId: 'besanttech@2026', password: 'besanttech@2026' },
@@ -125,13 +126,14 @@ function LoginScreen({ onLogin }) {
 
   const submit = async (e) => {
     e?.preventDefault()
-    if (loading) return
+    if (submitting.current) return
+    submitting.current = true
     setLoading(true)
     try {
-      const res = await api('/auth/login', 'POST', { role, loginId, password })
+      const res = await api('/auth/login', 'POST', { role, loginId: loginId.trim(), password })
       onLogin(res)
     } catch (err) { toast.error(err.message || 'Invalid credentials') }
-    finally { setLoading(false) }
+    finally { submitting.current = false; setLoading(false) }
   }
 
   return (
@@ -199,9 +201,9 @@ function LoginScreen({ onLogin }) {
                   <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Eye className="h-4 w-4" /></button>
                 </div>
               </div>
-              <Button type="submit" onClick={submit} disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
+              <button type="submit" disabled={loading} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-base font-semibold text-white shadow transition-opacity hover:opacity-95 disabled:pointer-events-none disabled:opacity-60">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
-              </Button>
+              </button>
             </form>
 
             <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
@@ -1600,8 +1602,7 @@ function App() {
       AUTH_TOKEN = t
       setToken(t)
       setUser(parsed)
-      setBooting(false)
-      api('/auth/me').catch(() => logout())
+      api('/auth/me').catch(() => logout()).finally(() => setBooting(false))
     } catch {
       logout()
       setBooting(false)
