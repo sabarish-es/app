@@ -1542,16 +1542,29 @@ function TrainerStudents() {
 
 /* ============================ ROOT ============================ */
 function App() {
-  const [booting, setBooting] = useState(true)
+  const [booting, setBooting] = useState(false)
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [needPwd, setNeedPwd] = useState(false)
 
   useEffect(() => {
-    const t = localStorage.getItem('bsh_token'); const u = localStorage.getItem('bsh_user')
-    if (t && u) { AUTH_TOKEN = t; setToken(t); const parsed = JSON.parse(u); setUser(parsed); api('/auth/me').then(() => {}).catch(() => { logout() }) }
-
-    setBooting(false)
+    try {
+      const t = localStorage.getItem('bsh_token')
+      const u = localStorage.getItem('bsh_user')
+      if (t && u) {
+        const parsed = JSON.parse(u)
+        AUTH_TOKEN = t
+        setToken(t)
+        setUser(parsed)
+        api('/auth/me').catch(() => logout())
+      }
+    } catch {
+      localStorage.removeItem('bsh_token')
+      localStorage.removeItem('bsh_user')
+      AUTH_TOKEN = null
+    } finally {
+      setBooting(false)
+    }
   }, [])
 
   const onLogin = (res) => {
