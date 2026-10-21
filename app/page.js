@@ -181,7 +181,7 @@ const submit = async (e) => {
                   <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Eye className="h-4 w-4" /></button>
                 </div>
               </div>
-              <Button type="submit" onClick={e => submit({ preventDefault: () => e.preventDefault(), currentTarget: e.currentTarget.form })} disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
+              <Button type="submit" disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
               </Button>
             </form>
