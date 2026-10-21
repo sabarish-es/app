@@ -454,7 +454,9 @@ function AdminStudents() {
       const buffer = await file.arrayBuffer(); const bytes = new Uint8Array(buffer); let binary = ''
       bytes.forEach(byte => { binary += String.fromCharCode(byte) })
       const result = await api('/students/import', 'POST', { fileBase64: btoa(binary) })
-      toast.success(`${result.imported} students imported; ${result.errors?.length || 0} rows skipped`); load()
+      if ((result.imported || 0) > 0) toast.success(`${result.imported} students imported${result.errors?.length ? `; ${result.errors.length} rows skipped` : ''}`)
+      else toast.error(result.errors?.[0]?.errors?.join(', ') || 'No students were imported')
+      load()
     } catch (e) { toast.error(e.message) } finally { event.target.value = '' }
   }
 

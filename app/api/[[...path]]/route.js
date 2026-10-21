@@ -481,18 +481,21 @@ async function handleRoute(request, { params }) {
         const rowErrors = []
         if (!studentId) rowErrors.push('Student ID is required')
         if (!name) rowErrors.push('Student Name is required')
-        if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) rowErrors.push('Invalid email')
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) rowErrors.push('Invalid email')
         if (studentId && usedIds.has(studentId)) rowErrors.push('Duplicate Student ID')
-        const course = courses.find(c => c.name.toLowerCase() === (courseName || '').toLowerCase())
-        const batch = batches.find(b => b.batchId.toLowerCase() === (batchName || '').toLowerCase() || b.name.toLowerCase() === (batchName || '').toLowerCase())
-        if (courseName && !course) rowErrors.push('Course not found')
-        if (batchName && !batch) rowErrors.push('Batch not found')
+        const normalize = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+        const courseKey = normalize(courseName)
+        const batchKey = normalize(batchName)
+        const course = courses.find(c => normalize(c.name) === courseKey || normalize(c.code) === courseKey)
+        const batch = batches.find(b => normalize(b.batchId) === batchKey || normalize(b.name) === batchKey)
+        // Course and batch names are kept even when the CSV references a catalog item
+        // that has not been created yet, so students can be imported before catalog setup.
         if (rowErrors.length) errors.push({ row: index + 2, data: raw, errors: rowErrors })
         else {
           let loginId = studentId; let suffix = 1
           while (usedLogins.has(loginId)) loginId = `${studentId}-${suffix++}`
           usedIds.add(studentId); usedLogins.add(loginId)
-          valid.push({ studentId, loginId, name, email: email || '', mobile: row.phone_number || row.phone || '', courseId: course?.id || batch?.courseId, batchId: batch?.id, enrollmentDate: row.enrollment_date || todayStr(), status: row.student_status || 'Active', courseName: course?.name || batch?.courseName, batchName: batch?.batchId, trainerId: batch?.trainerId, trainerName: batch?.trainerName })
+          valid.push({ studentId, loginId, name, email: email || '', mobile: row.phone_number || row.phone || '', courseId: course?.id || batch?.courseId, batchId: batch?.id, enrollmentDate: row.enrollment_date || todayStr(), status: row.student_status || 'Active', courseName: course?.name || batch?.courseName || courseName || '', batchName: batch?.batchId || batch?.name || batchName || '', trainerId: batch?.trainerId, trainerName: batch?.trainerName })
         }
       })
       if (body.preview) return json({ preview: true, valid, errors, summary: { valid: valid.length, failed: errors.length } })
