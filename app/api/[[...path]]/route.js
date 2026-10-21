@@ -345,7 +345,7 @@ async function handleRoute(request, { params }) {
     }
     if (route.startsWith('/courses/') && method === 'PUT') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; await db.collection('courses').updateOne({ id }, { $set: { name: body.name, code: body.code, description: body.description, active: body.active } }); return json({ ok: true })
+      const id = path[1]; const current = await db.collection('courses').findOne({ id }); const technologies = body.technologies || { frontend: body.frontend || current?.technologies?.frontend || [], backend: body.backend || current?.technologies?.backend || [], database: body.database || current?.technologies?.database || [] }; await db.collection('courses').updateOne({ id }, { $set: { name: body.name ?? current?.name, code: body.code ?? current?.code, description: body.description ?? current?.description, technologies, syllabus: body.syllabus ?? current?.syllabus ?? '', active: body.active ?? current?.active ?? true } }); return json({ ok: true })
     }
     if (route.startsWith('/courses/') && method === 'DELETE') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
@@ -377,12 +377,12 @@ async function handleRoute(request, { params }) {
     if (route.startsWith('/trainers/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('trainers').deleteOne({ id: path[1] }); return json({ ok: true }) }
 
     // ---------- BATCHES ----------
-    if (route === '/batches' && method === 'GET') { return json(cleanArr(await db.collection('batches').find({}).sort({ createdAt: -1 }).toArray())) }
+    if (route === '/batches' && method === 'GET') { const now = new Date(); const batches = await db.collection('batches').find({}).sort({ createdAt: -1 }).toArray(); return json(cleanArr(batches.map(b => { if (['Completed', 'Cancelled'].includes(b.status)) return b; const start = b.startDate ? new Date(b.startDate) : null; const end = b.endDate ? new Date(b.endDate) : null; const status = start && now < start ? 'Upcoming' : end && now > end ? 'Completed' : start ? 'Ongoing' : (b.status || 'Upcoming'); return { ...b, status } }))) }
     if (route === '/batches' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const course = body.courseId ? await db.collection('courses').findOne({ id: body.courseId }) : null
       const trainer = body.trainerId ? await db.collection('trainers').findOne({ id: body.trainerId }) : null
-      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
+      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
       await db.collection('batches').insertOne(b)
       if (b.courseId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'course', targetId: b.courseId, title: `New ${b.courseName} batch available`, message: `${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Booking deadline: ${b.bookingDeadline || 'see portal'}.`, read: [], createdAt: new Date().toISOString() })
       await audit(db, auth.id, 'Created batch', 'batch', b.id, b.batchId); return json(clean(b))
@@ -400,7 +400,10 @@ async function handleRoute(request, { params }) {
       if (batchId) filter.batchId = batchId
       if (status) filter.status = status
       let list = await db.collection('students').find(filter).sort({ createdAt: -1 }).toArray()
-      if (q) { const s = q.toLowerCase(); list = list.filter(x => [x.name, x.studentId, x.loginId, x.email, x.mobile].some(v => (v || '').toLowerCase().includes(s))) }
+      const batches = await db.collection('batches').find({}).toArray()
+      const batchMap = new Map(batches.map(b => [b.id, b]))
+      list = list.map(s => { const b = batchMap.get(s.batchId); return { ...s, courseName: s.courseName || b?.courseName, batchName: s.batchName || b?.batchId, batchStartDate: s.batchStartDate || b?.startDate, batchEndDate: s.batchEndDate || b?.endDate, batchStatus: b?.status || s.batchStatus } })
+      if (q) { const s = q.toLowerCase(); list = list.filter(x => [x.name, x.studentId, x.loginId, x.email, x.mobile, x.courseName, x.batchName].some(v => (v || '').toLowerCase().includes(s))) }
       return json(cleanArr(list))
     }
     if (route === '/students' && method === 'POST') {

@@ -487,8 +487,8 @@ function AdminStudents() {
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-8 w-8"><AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-medium text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId}</div></div></div></td>
                     <td className="px-4 py-3 font-mono text-xs">{s.loginId}</td>
                     <td className="px-4 py-3 text-slate-600">{s.courseName || '--'}</td>
-                    <td className="px-4 py-3 text-slate-600">{s.batchName || '--'}</td>
-                    <td className="px-4 py-3"><StatusBadge status={s.accountStatus} /></td>
+<td className="px-4 py-3 text-slate-600">{s.batchName || '--'}<div className="text-xs text-slate-400">{s.batchStatus || ''} · {s.batchStartDate || '--'} to {s.batchEndDate || '--'}</div></td>
+            <td className="px-4 py-3"><StatusBadge status={s.status || s.accountStatus} /></td>
                     <td className="px-4 py-3"><div className="flex justify-end gap-1">
                       <Button size="icon" variant="ghost" title="View" onClick={() => setDetail(s)}><Eye className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(s)}><KeyRound className="h-4 w-4" /></Button>
@@ -569,17 +569,21 @@ function Field({ label, children }) { return <div><Label className="text-xs font
 
 /* ---------- Courses ---------- */
 function AdminCourses() {
-  const [list, setList] = useState(null); const [name, setName] = useState(''); const [code, setCode] = useState('')
+  const [list, setList] = useState(null); const [name, setName] = useState(''); const [code, setCode] = useState(''); const [frontend, setFrontend] = useState(''); const [backend, setBackend] = useState(''); const [database, setDatabase] = useState(''); const [syllabus, setSyllabus] = useState('')
   const load = () => api('/courses').then(setList)
   useEffect(() => { load() }, [])
-  const add = async () => { if (!name) return; try { await api('/courses', 'POST', { name, code }); toast.success('Course added'); setName(''); setCode(''); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!name) return; try { await api('/courses', 'POST', { name, code, frontend: frontend.split(',').map(x => x.trim()).filter(Boolean), backend: backend.split(',').map(x => x.trim()).filter(Boolean), database: database.split(',').map(x => x.trim()).filter(Boolean), syllabus }); toast.success('Course added'); setName(''); setCode(''); setFrontend(''); setBackend(''); setDatabase(''); setSyllabus(''); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete course?')) return; await api(`/courses/${id}`, 'DELETE'); load() }
   return (
     <div className="space-y-4">
-      <Card className="rounded-2xl"><CardContent className="flex flex-wrap items-end gap-3 pt-6">
-        <Field label="Course Name"><Input value={name} onChange={e => setName(e.target.value)} className="w-64" placeholder="e.g. Cloud Computing" /></Field>
-        <Field label="Code"><Input value={code} onChange={e => setCode(e.target.value)} className="w-32" placeholder="CC" /></Field>
-        <Button onClick={add} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Course</Button>
+      <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Course Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Python Full Stack" /></Field>
+        <Field label="Code"><Input value={code} onChange={e => setCode(e.target.value)} placeholder="PY-FS" /></Field>
+        <Field label="Frontend technologies"><Input value={frontend} onChange={e => setFrontend(e.target.value)} placeholder="HTML, CSS, React" /></Field>
+        <Field label="Backend technologies"><Input value={backend} onChange={e => setBackend(e.target.value)} placeholder="Python, Django" /></Field>
+        <Field label="Database technologies"><Input value={database} onChange={e => setDatabase(e.target.value)} placeholder="MySQL, MongoDB" /></Field>
+        <Field label="Syllabus details"><Input value={syllabus} onChange={e => setSyllabus(e.target.value)} placeholder="Modules and outcomes" /></Field>
+        <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Course</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -598,10 +602,10 @@ function AdminCourses() {
 /* ---------- Batches ---------- */
 function AdminBatches() {
   const [list, setList] = useState(null); const [courses, setCourses] = useState([]); const [trainers, setTrainers] = useState([])
-  const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 })
+  const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 30 })
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
-  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', form); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
@@ -613,6 +617,8 @@ function AdminBatches() {
         <Field label="Trainer"><Select value={form.trainerId} onValueChange={v => setForm({ ...form, trainerId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{trainers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Start Date"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
         <Field label="End Date"><Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></Field>
+        <Field label="Booking deadline"><Input type="date" value={form.bookingDeadline} onChange={e => setForm({ ...form, bookingDeadline: e.target.value })} /></Field>
+        <Field label="Available time slots"><Input value={form.availableSlots} onChange={e => setForm({ ...form, availableSlots: e.target.value })} placeholder="09:00-11:00, 18:00-20:00" /></Field>
         <Field label="Status"><Select value={form.status || 'Upcoming'} onValueChange={v => setForm({ ...form, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Upcoming', 'Active', 'Completed', 'Cancelled'].map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
         <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Create Batch</Button></div>
       </CardContent></Card>
@@ -621,7 +627,9 @@ function AdminBatches() {
           {list.map(b => (
             <Card key={b.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6">
               <div className="flex items-center justify-between"><div className="font-bold text-slate-800">{b.batchId}</div><StatusBadge status={b.status} /></div>
-              <div className="mt-1 text-sm text-slate-500">{b.courseName}</div>
+              <div className="mt-1 text-sm text-slate-500">{b.courseName} · {b.name || b.batchId}</div>
+              <div className="mt-2 text-xs text-slate-500">{b.startDate || '--'} to {b.endDate || '--'} · Booking by {b.bookingDeadline || '--'}</div>
+              <div className="mt-2 text-xs text-slate-500">Slots: {Array.isArray(b.availableSlots) ? b.availableSlots.join(', ') : (b.availableSlots || '--')}</div>
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
               <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
             </CardContent></Card>
