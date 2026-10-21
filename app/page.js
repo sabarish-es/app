@@ -602,6 +602,8 @@ function AdminBatches() {
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
   const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', form); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
+  const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
+  const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
     <div className="space-y-4">
       <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -611,6 +613,7 @@ function AdminBatches() {
         <Field label="Trainer"><Select value={form.trainerId} onValueChange={v => setForm({ ...form, trainerId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{trainers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Start Date"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
         <Field label="End Date"><Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></Field>
+        <Field label="Status"><Select value={form.status || 'Upcoming'} onValueChange={v => setForm({ ...form, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Upcoming', 'Active', 'Completed', 'Cancelled'].map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
         <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Create Batch</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
@@ -620,6 +623,7 @@ function AdminBatches() {
               <div className="flex items-center justify-between"><div className="font-bold text-slate-800">{b.batchId}</div><StatusBadge status={b.status} /></div>
               <div className="mt-1 text-sm text-slate-500">{b.courseName}</div>
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
+              <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
             </CardContent></Card>
           ))}
         </div>
