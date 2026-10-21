@@ -179,7 +179,7 @@ function LoginScreen({ onLogin }) {
                   <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Eye className="h-4 w-4" /></button>
                 </div>
               </div>
-              <Button type="submit" disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
+              <Button type="button" onClick={submit} disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
               </Button>
             </form>
@@ -350,9 +350,17 @@ function AdminApp({ user, onLogout }) {
 
 function AdminDashboard() {
   const [data, setData] = useState(null)
-  useEffect(() => { api('/dashboard/admin').then(setData).catch(() => {}) }, [])
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    api('/dashboard/admin')
+      .then(result => { if (active) setData({ cards: {}, daily: [], courseWise: [], ...result }) })
+      .catch(err => { if (active) setError(err.message || 'Unable to load dashboard data') })
+    return () => { active = false }
+  }, [])
+  if (error) return <Empty icon={RefreshCw} title="Dashboard data is unavailable" sub={error} />
   if (!data) return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>
-  const c = data.cards
+  const c = data.cards || {}
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1549,8 +1557,6 @@ function App() {
 
   const logout = useCallback(() => {
     AUTH_TOKEN = null
-    localStorage.removeItem('bsh_token')
-    localStorage.removeItem('bsh_user')
     setToken(null)
     setUser(null)
     setNeedPwd(false)
@@ -1559,16 +1565,12 @@ function App() {
   useEffect(() => {
     // Start every browser load at the login screen. Tokens remain in memory only,
     // so an old or expired browser session cannot bypass authentication.
-    localStorage.removeItem('bsh_token')
-    localStorage.removeItem('bsh_user')
     AUTH_TOKEN = null
     setBooting(false)
   }, [])
 
   const onLogin = (res) => {
     AUTH_TOKEN = res.token
-    localStorage.setItem('bsh_token', res.token)
-    localStorage.setItem('bsh_user', JSON.stringify(res.user))
     setToken(res.token)
     setUser(res.user)
     setNeedPwd(res.user.role === 'student' && res.user.requirePasswordChange === true)
