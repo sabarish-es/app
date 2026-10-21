@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
@@ -107,22 +107,25 @@ function Logo({ light }) {
 /* ============================ LOGIN ============================ */
 function LoginScreen({ onLogin }) {
   const [role, setRole] = useState('admin')
-  const [loginId, setLoginId] = useState('besanttech@2026')
-  const [password, setPassword] = useState('besanttech@2026')
+  const [loginId, setLoginId] = useState('')
+  const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const switchRole = (r) => {
     setRole(r)
-    if (r === 'admin') { setLoginId('besanttech@2026'); setPassword('besanttech@2026') }
-    else if (r === 'trainer') { setLoginId('TR-01'); setPassword('Trainer@2026') }
-    else { setLoginId('BST-PY-001'); setPassword('Bst@2026') }
+    setLoginId('')
+    setPassword('')
   }
-  const submit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const res = await api('/auth/login', 'POST', { role, loginId, password })
+const submit = async (e) => {
+  e.preventDefault()
+  const form = e.currentTarget
+  const formData = new FormData(form)
+  const submittedLoginId = String(formData.get('loginId') || loginId).trim()
+  const submittedPassword = String(formData.get('password') || password)
+  setLoading(true)
+  try {
+  const res = await api('/auth/login', 'POST', { role, loginId: submittedLoginId, password: submittedPassword })
       onLogin(res)
     } catch (err) { toast.error(err.message || 'Invalid credentials') }
     finally { setLoading(false) }
@@ -135,7 +138,7 @@ function LoginScreen({ onLogin }) {
         {/* Left branding */}
         <div className="hidden flex-col justify-between p-12 lg:flex">
           <Logo light />
-          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
+          <motion.div initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-indigo-200 backdrop-blur">
               <Sparkles className="h-3.5 w-3.5" /> Premium Attendance Portal
             </div>
@@ -152,7 +155,7 @@ function LoginScreen({ onLogin }) {
 
         {/* Right login card */}
         <div className="flex items-center justify-center p-6">
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5 }}
+          <motion.div initial={false} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5 }}
             className="w-full max-w-md rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-2xl backdrop-blur-xl">
             <div className="lg:hidden mb-6"><Logo /></div>
             <h2 className="text-2xl font-bold">Welcome Back</h2>
@@ -160,7 +163,7 @@ function LoginScreen({ onLogin }) {
 
             <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
               {['admin', 'trainer', 'student'].map(r => (
-                <button key={r} onClick={() => switchRole(r)}
+                <button type="button" key={r} onClick={() => switchRole(r)}
                   className={`relative rounded-lg py-2.5 text-sm font-semibold capitalize transition ${role === r ? 'text-white' : 'text-slate-500'}`}>
                   {role === r && <motion.div layoutId="roletab" className="absolute inset-0 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 shadow" />}
                   <span className="relative flex items-center justify-center gap-1.5">{r === 'admin' ? <ShieldCheck className="h-4 w-4" /> : r === 'trainer' ? <UserCog className="h-4 w-4" /> : <GraduationCap className="h-4 w-4" />}{r}</span>
@@ -170,27 +173,21 @@ function LoginScreen({ onLogin }) {
 
             <form onSubmit={submit} className="space-y-4">
               <div>
-                <Label className="text-xs font-semibold text-slate-600">{role === 'admin' ? 'Admin ID / Email' : 'Login ID'}</Label>
-                <Input value={loginId} onChange={e => setLoginId(e.target.value)} className="mt-1.5 h-11" placeholder={role === 'admin' ? 'besanttech@2026' : 'BST-PY-001'} />
+<Label htmlFor="portal-login-id" className="text-xs font-semibold text-slate-600">{role === 'admin' ? 'Admin ID / Email' : 'Login ID'}</Label>
+  <Input id="portal-login-id" name="loginId" value={loginId} onChange={e => setLoginId(e.target.value)} className="mt-1.5 h-11" placeholder={role === 'admin' ? 'Admin email' : 'Student or trainer ID'} />
               </div>
               <div>
-                <Label className="text-xs font-semibold text-slate-600">Password</Label>
-                <div className="relative mt-1.5">
-                  <Input type={show ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="h-11 pr-10" placeholder="••••••••" />
+<Label htmlFor="portal-password" className="text-xs font-semibold text-slate-600">Password</Label>
+  <div className="relative mt-1.5">
+  <Input id="portal-password" name="password" type={show ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="h-11 pr-10" placeholder="••••••••" />
                   <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Eye className="h-4 w-4" /></button>
                 </div>
               </div>
-              <Button type="submit" disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
+              <Button type="submit" onClick={e => submit({ preventDefault: () => e.preventDefault(), currentTarget: e.currentTarget.form })} disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
               </Button>
             </form>
 
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-              <div className="font-semibold text-slate-600">Demo credentials</div>
-              <div className="mt-1">Admin: <b>besanttech@2026</b> / <b>besanttech@2026</b></div>
-              <div>Trainer: <b>TR-01</b> / <b>Trainer@2026</b></div>
-              <div>Student: <b>BST-PY-001</b> / <b>Bst@2026</b></div>
-            </div>
             <p className="mt-4 text-center text-xs text-slate-400">Student registration is managed by Besant Technologies Administration.</p>
           </motion.div>
         </div>
@@ -212,7 +209,7 @@ function ChangePassword({ onDone }) {
   return (
     <div className="relative grid min-h-screen place-items-center bg-slate-950 p-6 text-white">
       <AnimatedBg dark />
-      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-2xl">
+      <motion.div initial={false} animate={{ opacity: 1, scale: 1 }} className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 bg-white/95 p-8 text-slate-900 shadow-2xl">
         <div className="mb-2 flex items-center gap-2 text-indigo-600"><KeyRound className="h-5 w-5" /><span className="font-semibold">First Login</span></div>
         <h2 className="text-2xl font-bold">Create Your New Password</h2>
         <p className="mb-6 text-sm text-slate-500">Please set a new password before continuing.</p>
@@ -236,7 +233,7 @@ function StatCard({ icon: Icon, label, value, suffix = '', color = 'indigo', del
     sky: 'from-sky-500 to-blue-600', slate: 'from-slate-500 to-slate-700',
   }
   return (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
+    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
       className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className={`absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br opacity-10 ${colors[color]}`} />
       <div className={`mb-3 inline-grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br text-white ${colors[color]}`}><Icon className="h-5 w-5" /></div>
@@ -329,7 +326,7 @@ function AdminApp({ user, onLogout }) {
         </header>
         <main className="p-5">
           <AnimatePresence mode="wait">
-            <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+            <motion.div key={view} initial={false} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               {view === 'dashboard' && <AdminDashboard />}
               {view === 'students' && <AdminStudents />}
               {view === 'courses' && <AdminCourses />}
@@ -357,9 +354,17 @@ function AdminApp({ user, onLogout }) {
 
 function AdminDashboard() {
   const [data, setData] = useState(null)
-  useEffect(() => { api('/dashboard/admin').then(setData).catch(() => {}) }, [])
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    api('/dashboard/admin')
+      .then(result => { if (active) setData({ cards: {}, daily: [], courseWise: [], ...result }) })
+      .catch(err => { if (active) setError(err.message || 'Unable to load dashboard data') })
+    return () => { active = false }
+  }, [])
+  if (error) return <Empty icon={RefreshCw} title="Dashboard data is unavailable" sub={error} />
   if (!data) return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>
-  const c = data.cards
+  const c = data.cards || {}
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -799,7 +804,7 @@ function AdminLive() {
               <tbody className="divide-y divide-slate-100">
                 <AnimatePresence>
                   {data.rows.map(r => (
-                    <motion.tr key={r.studentId} layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="hover:bg-slate-50">
+                    <motion.tr key={r.studentId} layout initial={false} animate={{ opacity: 1, x: 0 }} className="hover:bg-slate-50">
                       <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-7 w-7"><AvatarFallback className="bg-slate-100 text-xs">{initials(r.name)}</AvatarFallback></Avatar><span className="font-medium text-slate-800">{r.name}</span></div></td>
                       <td className="px-4 py-3">{fmtTime(r.checkIn)}</td>
                       <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
@@ -1038,7 +1043,7 @@ function StudentApp({ user, onLogout }) {
       </header>
       <main className="mx-auto max-w-3xl p-5">
         <AnimatePresence mode="wait">
-          <motion.div key={view} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+          <motion.div key={view} initial={false} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
             {view === 'dashboard' && <StudentDashboard user={user} go={setView} />}
             {view === 'schedule' && <StudentSchedule />}
             {view === 'scan' && <StudentScan onDone={() => setView('dashboard')} />}
@@ -1085,7 +1090,7 @@ function StudentDashboard({ user, go }) {
   const now = new Date()
   return (
     <div className="space-y-5">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
+      <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
         <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative">
           <div className="text-sm text-indigo-100">{greet()},</div>
@@ -1122,7 +1127,7 @@ function StudentDashboard({ user, go }) {
             const end = new Date(); const [eh, em] = s.endTime.split(':'); end.setHours(+eh, +em, 0, 0)
             const isLive = now >= start && now <= end; const done = now > end
             return (
-              <motion.div key={s.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+              <motion.div key={s.id} initial={false} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                 className={`flex items-center gap-4 rounded-2xl border bg-white p-4 ${isLive ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'}`}>
                 <div className="text-center"><div className="text-sm font-bold text-slate-800">{s.startTime}</div><div className="text-xs text-slate-400">{s.endTime}</div></div>
                 <div className="h-10 w-px bg-slate-200" />
@@ -1230,8 +1235,8 @@ function ScanResult({ result, onClose }) {
   const ok = result.ok
   return (
     <div className="grid min-h-[60vh] place-items-center">
-      <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm rounded-3xl border bg-white p-8 text-center shadow-xl">
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
+      <motion.div initial={false} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm rounded-3xl border bg-white p-8 text-center shadow-xl">
+        <motion.div initial={false} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
           className={`mx-auto grid h-24 w-24 place-items-center rounded-full ${ok ? 'bg-emerald-100' : 'bg-rose-100'}`}>
           {ok ? <CheckCircle2 className="h-14 w-14 text-emerald-600" /> : <XCircle className="h-14 w-14 text-rose-600" />}
         </motion.div>
@@ -1440,6 +1445,7 @@ const TRAINER_NAV = [
   { key: 'dashboard', label: 'My Classes', icon: LayoutDashboard },
   { key: 'attendance', label: 'Attendance', icon: FileBarChart },
   { key: 'students', label: 'Students', icon: Users },
+  { key: 'leave', label: 'Leave Requests', icon: PlaneTakeoff },
 ]
 function TrainerApp({ user, onLogout }) {
   const [view, setView] = useState('dashboard')
@@ -1460,16 +1466,27 @@ function TrainerApp({ user, onLogout }) {
       ))}</div>
       <main className="mx-auto max-w-5xl p-5">
         <AnimatePresence mode="wait">
-          <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-            {view === 'dashboard' && <TrainerDashboard user={user} />}
-            {view === 'attendance' && <TrainerAttendance />}
-            {view === 'students' && <TrainerStudents />}
+          <motion.div key={view} initial={false} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+ {view === 'dashboard' && <TrainerDashboard user={user} />}
+ {view === 'attendance' && <TrainerAttendance />}
+ {view === 'students' && <TrainerStudents />}
+ {view === 'leave' && <TrainerLeave />}
           </motion.div>
         </AnimatePresence>
       </main>
     </div>
   )
 }
+function TrainerLeave() {
+  const [list, setList] = useState(null)
+  const [remark, setRemark] = useState({})
+  const load = () => api('/leave').then(setList).catch(() => setList([]))
+  useEffect(() => { load() }, [])
+  const decide = async (id, status) => { await api(`/leave/${id}`, 'PUT', { status, remark: remark[id] || '' }); toast.success(`Leave ${status.toLowerCase()}`); load() }
+  if (!list) return <Skeleton className="h-64 rounded-2xl" />
+  return <div className="space-y-3">{list.length === 0 ? <Empty icon={PlaneTakeoff} title="No student leave requests" /> : list.map(l => <Card key={l.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="font-semibold text-slate-800">{l.studentName} <span className="text-xs text-slate-400">({l.studentCode})</span></div><div className="mt-1 text-sm text-slate-500">{l.fromDate} → {l.toDate} · {l.reason}</div><div className="text-xs text-slate-400">Submitted {l.createdAt ? new Date(l.createdAt).toLocaleDateString() : '—'}</div></div><StatusBadge status={l.status === 'Rejected' ? 'Rejected2' : l.status} /></div>{l.status === 'Pending' && <div className="mt-4 flex flex-wrap gap-2"><Input className="max-w-md" placeholder="Optional remark" value={remark[l.id] || ''} onChange={e => setRemark({ ...remark, [l.id]: e.target.value })} /><Button size="sm" onClick={() => decide(l.id, 'Approved')} className="bg-emerald-600 hover:bg-emerald-700">Approve</Button><Button size="sm" variant="outline" onClick={() => decide(l.id, 'Rejected')}>Reject</Button></div>}</CardContent></Card>)}</div>
+}
+
 function TrainerDashboard({ user }) {
   const [data, setData] = useState(null); const [qr, setQr] = useState(null)
   const load = () => api('/dashboard/trainer').then(setData).catch(() => {})
@@ -1535,34 +1552,51 @@ function TrainerStudents() {
   )
 }
 
+class PortalErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  componentDidCatch(error) { console.error('[v0] portal render error', error) }
+  render() {
+    if (!this.state.error) return this.props.children
+    return <div className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white"><div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-6 text-center"><h1 className="text-xl font-semibold">Portal could not load</h1><p className="mt-2 text-sm text-slate-300">{this.state.error.message || 'Unexpected dashboard error'}</p><button className="mt-5 rounded-lg bg-indigo-500 px-4 py-2 font-medium" onClick={() => window.location.reload()}>Reload portal</button></div></div>
+  }
+}
+
 /* ============================ ROOT ============================ */
 function App() {
-  const [booting, setBooting] = useState(true)
+  const [booting, setBooting] = useState(false)
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [needPwd, setNeedPwd] = useState(false)
 
-  useEffect(() => {
-    const t = localStorage.getItem('bsh_token'); const u = localStorage.getItem('bsh_user')
-    if (t && u) { AUTH_TOKEN = t; setToken(t); const parsed = JSON.parse(u); setUser(parsed); api('/auth/me').then(() => {}).catch(() => { logout() }) }
+  const logout = useCallback(() => {
+    AUTH_TOKEN = null
+    setToken(null)
+    setUser(null)
+    setNeedPwd(false)
+  }, [])
 
+  useEffect(() => {
+    // Start every browser load at the login screen. Tokens remain in memory only,
+    // so an old or expired browser session cannot bypass authentication.
+    AUTH_TOKEN = null
     setBooting(false)
   }, [])
 
   const onLogin = (res) => {
-    AUTH_TOKEN = res.token; localStorage.setItem('bsh_token', res.token); localStorage.setItem('bsh_user', JSON.stringify(res.user))
-    setToken(res.token); setUser(res.user)
-    if (res.user.role === 'student' && res.user.requirePasswordChange) setNeedPwd(true)
+    AUTH_TOKEN = res.token
+    setToken(res.token)
+    setUser(res.user)
+    setNeedPwd(res.user.role === 'student' && res.user.requirePasswordChange === true)
     toast.success(`Welcome, ${res.user.name}`)
   }
-  const logout = () => { AUTH_TOKEN = null; localStorage.removeItem('bsh_token'); localStorage.removeItem('bsh_user'); setToken(null); setUser(null); setNeedPwd(false) }
 
   if (booting) return <div className="grid min-h-screen place-items-center bg-slate-950"><Loader2 className="h-8 w-8 animate-spin text-indigo-400" /></div>
   if (!token || !user) return <LoginScreen onLogin={onLogin} />
   if (needPwd) return <ChangePassword onDone={() => setNeedPwd(false)} />
-  if (user.role === 'admin') return <AdminApp user={user} onLogout={logout} />
-  if (user.role === 'trainer') return <TrainerApp user={user} onLogout={logout} />
-  return <StudentApp user={user} onLogout={logout} />
+  if (user.role === 'admin') return <PortalErrorBoundary><AdminApp user={user} onLogout={logout} /></PortalErrorBoundary>
+  if (user.role === 'trainer') return <PortalErrorBoundary><TrainerApp user={user} onLogout={logout} /></PortalErrorBoundary>
+  return <PortalErrorBoundary><StudentApp user={user} onLogout={logout} /></PortalErrorBoundary>
 }
 
 export default App
