@@ -444,10 +444,17 @@ async function handleRoute(request, { params }) {
     if (route.startsWith('/students/') && path.length === 2 && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('students').deleteOne({ id: path[1] }); await audit(db, auth.id, 'Deleted student', 'student', path[1]); return json({ ok: true }) }
     if (route.endsWith('/reset-password') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const np = body.newPassword
-      if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
-      await db.collection('students').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 12), requirePasswordChange: true, firstLoginCompleted: false } })
-      await audit(db, auth.id, 'Reset student password', 'student', id); return json({ ok: true })
+  const id = path[1]; const np = String(body.newPassword || '').trim()
+  if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
+  const student = await db.collection('students').findOne({ $or: [{ id }, { studentId: id }] })
+  if (!student) return json({ error: 'Student account not found' }, 404)
+  const result = await db.collection('students').updateOne(
+    { _id: student._id },
+    { $set: { passwordHash: bcrypt.hashSync(np, 12), requirePasswordChange: true, firstLoginCompleted: false, accountStatus: 'Active' } },
+  )
+  if (!result.matchedCount) return json({ error: 'Student password could not be reset' }, 500)
+  await audit(db, auth.id, 'Reset student password', 'student', student.id || student.studentId)
+  return json({ ok: true, requirePasswordChange: true })
     }
     if (route.endsWith('/toggle') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)

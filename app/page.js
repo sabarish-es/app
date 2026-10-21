@@ -440,7 +440,7 @@ function AdminStudents() {
   }
   const resetPwd = async (s) => {
     const np = prompt('New password for ' + s.name, 'Bst@2026'); if (!np) return
-    try { await api(`/students/${s.id}/reset-password`, 'POST', { newPassword: np }); toast.success('Password reset') } catch (e) { toast.error(e.message) }
+    try { const result = await api(`/students/${s.id || s.studentId}/reset-password`, 'POST', { newPassword: np }); toast.success(result.requirePasswordChange ? 'Password reset. Student must change it on next login.' : 'Password reset') } catch (e) { toast.error(e.message) }
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
