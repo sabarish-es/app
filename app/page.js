@@ -93,9 +93,7 @@ function AnimatedBg({ dark }) {
 function Logo({ light }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30">
-        <GraduationCap className="h-6 w-6 text-white" />
-      </div>
+      <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/unnamed-DRXtmuWlVJ5QtXVXGkULz144oNER6g.jpg" alt="Besant Technologies" className="h-10 w-10 rounded-xl object-contain shadow-lg" />
       <div className="leading-tight">
         <div className={`text-lg font-bold tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}>Besant <span className="text-indigo-500">StudentHub</span></div>
         <div className={`text-[10px] font-medium uppercase tracking-widest ${light ? 'text-indigo-200' : 'text-slate-400'}`}>Learn. Track. Grow.</div>
@@ -446,6 +444,19 @@ function AdminStudents() {
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
+  const downloadTemplate = () => {
+    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Batch Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,PY-FS-01,2026-01-05,Active'
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'besant-student-import-template.csv'; a.click(); URL.revokeObjectURL(a.href)
+  }
+  const importFile = async (event) => {
+    const file = event.target.files?.[0]; if (!file) return
+    try {
+      const buffer = await file.arrayBuffer(); const bytes = new Uint8Array(buffer); let binary = ''
+      bytes.forEach(byte => { binary += String.fromCharCode(byte) })
+      const result = await api('/students/import', 'POST', { fileBase64: btoa(binary) })
+      toast.success(`${result.imported} students imported; ${result.errors?.length || 0} rows skipped`); load()
+    } catch (e) { toast.error(e.message) } finally { event.target.value = '' }
+  }
 
   return (
     <div className="space-y-4">
@@ -456,6 +467,8 @@ function AdminStudents() {
         </div>
         <Select value={filterCourse} onValueChange={setFilterCourse}><SelectTrigger className="w-44"><SelectValue placeholder="Course" /></SelectTrigger><SelectContent><SelectItem value="all">All Courses</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{['all', 'Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'All Status' : s}</SelectItem>)}</SelectContent></Select>
+        <Button variant="outline" onClick={downloadTemplate}>Download Template</Button>
+        <label className="inline-flex h-10 cursor-pointer items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Import Excel/CSV<input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={importFile} /></label>
         <Button onClick={() => setShowAdd(true)} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Student</Button>
       </div>
 
