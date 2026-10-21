@@ -107,16 +107,15 @@ function Logo({ light }) {
 /* ============================ LOGIN ============================ */
 function LoginScreen({ onLogin }) {
   const [role, setRole] = useState('admin')
-  const [loginId, setLoginId] = useState('besanttech@2026')
-  const [password, setPassword] = useState('besanttech@2026')
+  const [loginId, setLoginId] = useState('')
+  const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const switchRole = (r) => {
     setRole(r)
-    if (r === 'admin') { setLoginId('besanttech@2026'); setPassword('besanttech@2026') }
-    else if (r === 'trainer') { setLoginId('TR-01'); setPassword('Trainer@2026') }
-    else { setLoginId('BST-PY-001'); setPassword('Bst@2026') }
+    setLoginId('')
+    setPassword('')
   }
   const submit = async (e) => {
     e.preventDefault()
@@ -171,7 +170,7 @@ function LoginScreen({ onLogin }) {
             <form onSubmit={submit} className="space-y-4">
               <div>
                 <Label className="text-xs font-semibold text-slate-600">{role === 'admin' ? 'Admin ID / Email' : 'Login ID'}</Label>
-                <Input value={loginId} onChange={e => setLoginId(e.target.value)} className="mt-1.5 h-11" placeholder={role === 'admin' ? 'besanttech@2026' : 'BST-PY-001'} />
+                <Input value={loginId} onChange={e => setLoginId(e.target.value)} className="mt-1.5 h-11" placeholder={role === 'admin' ? 'Admin email' : 'Student or trainer ID'} />
               </div>
               <div>
                 <Label className="text-xs font-semibold text-slate-600">Password</Label>
@@ -185,12 +184,6 @@ function LoginScreen({ onLogin }) {
               </Button>
             </form>
 
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-              <div className="font-semibold text-slate-600">Demo credentials</div>
-              <div className="mt-1">Admin: <b>besanttech@2026</b> / <b>besanttech@2026</b></div>
-              <div>Trainer: <b>TR-01</b> / <b>Trainer@2026</b></div>
-              <div>Student: <b>BST-PY-001</b> / <b>Bst@2026</b></div>
-            </div>
             <p className="mt-4 text-center text-xs text-slate-400">Student registration is managed by Besant Technologies Administration.</p>
           </motion.div>
         </div>
@@ -1440,6 +1433,7 @@ const TRAINER_NAV = [
   { key: 'dashboard', label: 'My Classes', icon: LayoutDashboard },
   { key: 'attendance', label: 'Attendance', icon: FileBarChart },
   { key: 'students', label: 'Students', icon: Users },
+  { key: 'leave', label: 'Leave Requests', icon: PlaneTakeoff },
 ]
 function TrainerApp({ user, onLogout }) {
   const [view, setView] = useState('dashboard')
@@ -1461,15 +1455,26 @@ function TrainerApp({ user, onLogout }) {
       <main className="mx-auto max-w-5xl p-5">
         <AnimatePresence mode="wait">
           <motion.div key={view} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-            {view === 'dashboard' && <TrainerDashboard user={user} />}
-            {view === 'attendance' && <TrainerAttendance />}
-            {view === 'students' && <TrainerStudents />}
+ {view === 'dashboard' && <TrainerDashboard user={user} />}
+ {view === 'attendance' && <TrainerAttendance />}
+ {view === 'students' && <TrainerStudents />}
+ {view === 'leave' && <TrainerLeave />}
           </motion.div>
         </AnimatePresence>
       </main>
     </div>
   )
 }
+function TrainerLeave() {
+  const [list, setList] = useState(null)
+  const [remark, setRemark] = useState({})
+  const load = () => api('/leave').then(setList).catch(() => setList([]))
+  useEffect(() => { load() }, [])
+  const decide = async (id, status) => { await api(`/leave/${id}`, 'PUT', { status, remark: remark[id] || '' }); toast.success(`Leave ${status.toLowerCase()}`); load() }
+  if (!list) return <Skeleton className="h-64 rounded-2xl" />
+  return <div className="space-y-3">{list.length === 0 ? <Empty icon={PlaneTakeoff} title="No student leave requests" /> : list.map(l => <Card key={l.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="font-semibold text-slate-800">{l.studentName} <span className="text-xs text-slate-400">({l.studentCode})</span></div><div className="mt-1 text-sm text-slate-500">{l.fromDate} → {l.toDate} · {l.reason}</div><div className="text-xs text-slate-400">Submitted {l.createdAt ? new Date(l.createdAt).toLocaleDateString() : '—'}</div></div><StatusBadge status={l.status === 'Rejected' ? 'Rejected2' : l.status} /></div>{l.status === 'Pending' && <div className="mt-4 flex flex-wrap gap-2"><Input className="max-w-md" placeholder="Optional remark" value={remark[l.id] || ''} onChange={e => setRemark({ ...remark, [l.id]: e.target.value })} /><Button size="sm" onClick={() => decide(l.id, 'Approved')} className="bg-emerald-600 hover:bg-emerald-700">Approve</Button><Button size="sm" variant="outline" onClick={() => decide(l.id, 'Rejected')}>Reject</Button></div>}</CardContent></Card>)}</div>
+}
+
 function TrainerDashboard({ user }) {
   const [data, setData] = useState(null); const [qr, setQr] = useState(null)
   const load = () => api('/dashboard/trainer').then(setData).catch(() => {})

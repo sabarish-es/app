@@ -310,8 +310,10 @@ async function handleRoute(request, { params }) {
     }
     if (route === '/auth/change-password' && method === 'POST') {
       if (!auth) return json({ error: 'Unauthorized' }, 401)
-      const { currentPassword, newPassword } = body
-      if (!newPassword || newPassword.length < 4) return json({ error: 'New password too short' }, 400)
+      const { currentPassword, newPassword, confirmPassword } = body
+      if (!currentPassword) return json({ error: 'Current password is required' }, 400)
+      if (!newPassword || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) return json({ error: 'Use at least 8 characters with uppercase, lowercase, and a number' }, 400)
+      if (confirmPassword !== undefined && newPassword !== confirmPassword) return json({ error: 'New passwords do not match' }, 400)
       const col = isAdmin ? 'admins' : isTrainer ? 'trainers' : 'students'
       const u = await db.collection(col).findOne({ id: auth.id })
       if (!bcrypt.compareSync(currentPassword || '', u.passwordHash)) return json({ error: 'Current password incorrect' }, 400)
@@ -365,9 +367,10 @@ async function handleRoute(request, { params }) {
     }
     if (route.endsWith('/reset-password') && route.startsWith('/trainers/') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const np = body.newPassword || 'Trainer@2026'
-      await db.collection('trainers').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 8) } })
-      await audit(db, auth.id, 'Reset trainer password', 'trainer', id); return json({ ok: true, newPassword: np })
+      const id = path[1]; const np = body.newPassword
+      if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
+      await db.collection('trainers').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 12), mustChangePassword: true } })
+      await audit(db, auth.id, 'Reset trainer password', 'trainer', id); return json({ ok: true })
     }
     if (route.startsWith('/trainers/') && method === 'PUT') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const id = path[1]; const { _id, id: _i, ...upd } = body; await db.collection('trainers').updateOne({ id }, { $set: upd }); return json({ ok: true }) }
     if (route.startsWith('/trainers/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('trainers').deleteOne({ id: path[1] }); return json({ ok: true }) }
@@ -438,9 +441,10 @@ async function handleRoute(request, { params }) {
     if (route.startsWith('/students/') && path.length === 2 && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('students').deleteOne({ id: path[1] }); await audit(db, auth.id, 'Deleted student', 'student', path[1]); return json({ ok: true }) }
     if (route.endsWith('/reset-password') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const np = body.newPassword || 'Bst@2026'
-      await db.collection('students').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 8), requirePasswordChange: !!body.requirePasswordChange } })
-      await audit(db, auth.id, 'Reset student password', 'student', id); return json({ ok: true, newPassword: np })
+      const id = path[1]; const np = body.newPassword
+      if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
+      await db.collection('students').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 12), requirePasswordChange: true, firstLoginCompleted: false } })
+      await audit(db, auth.id, 'Reset student password', 'student', id); return json({ ok: true })
     }
     if (route.endsWith('/toggle') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
@@ -653,6 +657,12 @@ async function handleRoute(request, { params }) {
     if (route === '/leave' && method === 'GET') {
       if (isAdmin) return json(cleanArr(await db.collection('leaveRequests').find({}).sort({ createdAt: -1 }).toArray()))
       if (isStudent) return json(cleanArr(await db.collection('leaveRequests').find({ studentId: auth.id }).sort({ createdAt: -1 }).toArray()))
+      if (isTrainer) {
+        const batches = await db.collection('batches').find({ trainerId: auth.id }).project({ id: 1 }).toArray()
+        const batchIds = batches.map(b => b.id)
+        const students = await db.collection('students').find({ batchId: { $in: batchIds } }).project({ id: 1 }).toArray()
+        return json(cleanArr(await db.collection('leaveRequests').find({ studentId: { $in: students.map(s => s.id) } }).sort({ createdAt: -1 }).toArray()))
+      }
       return json({ error: 'Unauthorized' }, 401)
     }
     if (route === '/leave' && method === 'POST') {
@@ -662,8 +672,15 @@ async function handleRoute(request, { params }) {
       await db.collection('leaveRequests').insertOne(l); return json(clean(l))
     }
     if (route.startsWith('/leave/') && method === 'PUT') {
-      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; await db.collection('leaveRequests').updateOne({ id }, { $set: { status: body.status } })
+      if (!isAdmin && !isTrainer) return json({ error: 'Forbidden' }, 403)
+      const id = path[1]; const existing = await db.collection('leaveRequests').findOne({ id })
+      if (!existing) return json({ error: 'Not found' }, 404)
+      if (isTrainer) {
+        const batch = await db.collection('students').findOne({ id: existing.studentId })
+        const assigned = await db.collection('batches').findOne({ id: batch?.batchId, trainerId: auth.id })
+        if (!assigned) return json({ error: 'Forbidden' }, 403)
+      }
+      await db.collection('leaveRequests').updateOne({ id }, { $set: { status: body.status, remark: body.remark || '', decidedAt: new Date().toISOString(), decidedBy: auth.id } })
       const l = await db.collection('leaveRequests').findOne({ id })
       await db.collection('notifications').insertOne({ id: uuidv4(), target: 'student', targetId: l.studentId, title: `Leave ${body.status}`, message: `Your leave (${l.fromDate} to ${l.toDate}) was ${body.status}.`, read: [], createdAt: new Date().toISOString() })
       await audit(db, auth.id, `Leave ${body.status}`, 'leave', id); return json({ ok: true })
