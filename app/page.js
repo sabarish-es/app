@@ -1547,33 +1547,33 @@ function App() {
   const [user, setUser] = useState(null)
   const [needPwd, setNeedPwd] = useState(false)
 
+  const logout = useCallback(() => {
+    AUTH_TOKEN = null
+    localStorage.removeItem('bsh_token')
+    localStorage.removeItem('bsh_user')
+    setToken(null)
+    setUser(null)
+    setNeedPwd(false)
+  }, [])
+
   useEffect(() => {
-    try {
-      const t = localStorage.getItem('bsh_token')
-      const u = localStorage.getItem('bsh_user')
-      if (t && u) {
-        const parsed = JSON.parse(u)
-        AUTH_TOKEN = t
-        setToken(t)
-        setUser(parsed)
-        api('/auth/me').catch(() => logout())
-      }
-    } catch {
-      localStorage.removeItem('bsh_token')
-      localStorage.removeItem('bsh_user')
-      AUTH_TOKEN = null
-    } finally {
-      setBooting(false)
-    }
+    // Start every browser load at the login screen. Tokens remain in memory only,
+    // so an old or expired browser session cannot bypass authentication.
+    localStorage.removeItem('bsh_token')
+    localStorage.removeItem('bsh_user')
+    AUTH_TOKEN = null
+    setBooting(false)
   }, [])
 
   const onLogin = (res) => {
-    AUTH_TOKEN = res.token; localStorage.setItem('bsh_token', res.token); localStorage.setItem('bsh_user', JSON.stringify(res.user))
-    setToken(res.token); setUser(res.user)
-    if (res.user.role === 'student' && res.user.requirePasswordChange) setNeedPwd(true)
+    AUTH_TOKEN = res.token
+    localStorage.setItem('bsh_token', res.token)
+    localStorage.setItem('bsh_user', JSON.stringify(res.user))
+    setToken(res.token)
+    setUser(res.user)
+    setNeedPwd(res.user.role === 'student' && res.user.requirePasswordChange === true)
     toast.success(`Welcome, ${res.user.name}`)
   }
-  const logout = () => { AUTH_TOKEN = null; localStorage.removeItem('bsh_token'); localStorage.removeItem('bsh_user'); setToken(null); setUser(null); setNeedPwd(false) }
 
   if (booting) return <div className="grid min-h-screen place-items-center bg-slate-950"><Loader2 className="h-8 w-8 animate-spin text-indigo-400" /></div>
   if (!token || !user) return <LoginScreen onLogin={onLogin} />
