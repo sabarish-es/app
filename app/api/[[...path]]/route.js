@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
+import * as XLSX from 'xlsx'
 
 // ---------------- Mongo ----------------
 let dbPromise
@@ -292,7 +293,7 @@ async function handleRoute(request, { params }) {
         if (tr.status !== 'Active') return json({ error: 'Account is inactive. Contact Admin.' }, 403)
         await db.collection('trainers').updateOne({ id: tr.id }, { $set: { lastLogin: new Date().toISOString() } })
         const token = signToken({ id: tr.id, role: 'trainer', name: tr.name })
-        return json({ token, user: { id: tr.id, name: tr.name, role: 'trainer', loginId: tr.loginId } })
+        return json({ token, user: { id: tr.id, name: tr.name, role: 'trainer', loginId: tr.loginId, mustChangePassword: !!tr.mustChangePassword } })
       } else {
         const st = await db.collection('students').findOne({ loginId: loginId.trim() })
         if (!st || !bcrypt.compareSync(password, st.passwordHash)) return json({ error: 'Invalid credentials' }, 401)
@@ -339,7 +340,7 @@ async function handleRoute(request, { params }) {
     if (route === '/courses' && method === 'GET') { return json(cleanArr(await db.collection('courses').find({}).sort({ name: 1 }).toArray())) }
     if (route === '/courses' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const c = { id: uuidv4(), name: body.name, code: body.code || '', description: body.description || '', active: true, createdAt: new Date().toISOString() }
+      const c = { id: uuidv4(), name: body.name, code: body.code || '', description: body.description || '', technologies: { frontend: body.frontend || [], backend: body.backend || [], database: body.database || [] }, syllabus: body.syllabus || '', active: true, createdAt: new Date().toISOString() }
       await db.collection('courses').insertOne(c); await audit(db, auth.id, 'Created course', 'course', c.id, c.name); return json(clean(c))
     }
     if (route.startsWith('/courses/') && method === 'PUT') {
@@ -381,8 +382,10 @@ async function handleRoute(request, { params }) {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const course = body.courseId ? await db.collection('courses').findOne({ id: body.courseId }) : null
       const trainer = body.trainerId ? await db.collection('trainers').findOne({ id: body.trainerId }) : null
-      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, startDate: body.startDate, endDate: body.endDate, trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Active', createdAt: new Date().toISOString() }
-      await db.collection('batches').insertOne(b); await audit(db, auth.id, 'Created batch', 'batch', b.id, b.batchId); return json(clean(b))
+      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
+      await db.collection('batches').insertOne(b)
+      if (b.courseId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'course', targetId: b.courseId, title: `New ${b.courseName} batch available`, message: `${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Booking deadline: ${b.bookingDeadline || 'see portal'}.`, read: [], createdAt: new Date().toISOString() })
+      await audit(db, auth.id, 'Created batch', 'batch', b.id, b.batchId); return json(clean(b))
     }
     if (route.startsWith('/batches/') && method === 'PUT') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const id = path[1]; const { _id, id: _i, ...upd } = body; await db.collection('batches').updateOne({ id }, { $set: upd }); return json({ ok: true }) }
     if (route.startsWith('/batches/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('batches').deleteOne({ id: path[1] }); return json({ ok: true }) }
@@ -441,16 +444,72 @@ async function handleRoute(request, { params }) {
     if (route.startsWith('/students/') && path.length === 2 && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('students').deleteOne({ id: path[1] }); await audit(db, auth.id, 'Deleted student', 'student', path[1]); return json({ ok: true }) }
     if (route.endsWith('/reset-password') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const np = body.newPassword
-      if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
-      await db.collection('students').updateOne({ id }, { $set: { passwordHash: bcrypt.hashSync(np, 12), requirePasswordChange: true, firstLoginCompleted: false } })
-      await audit(db, auth.id, 'Reset student password', 'student', id); return json({ ok: true })
+  const id = path[1]; const np = String(body.newPassword || '').trim()
+  if (!np || np.length < 8) return json({ error: 'Temporary password must be at least 8 characters' }, 400)
+  const student = await db.collection('students').findOne({ $or: [{ id }, { studentId: id }] })
+  if (!student) return json({ error: 'Student account not found' }, 404)
+  const result = await db.collection('students').updateOne(
+    { _id: student._id },
+    { $set: { passwordHash: bcrypt.hashSync(np, 12), requirePasswordChange: true, firstLoginCompleted: false, accountStatus: 'Active' } },
+  )
+  if (!result.matchedCount) return json({ error: 'Student password could not be reset' }, 500)
+  await audit(db, auth.id, 'Reset student password', 'student', student.id || student.studentId)
+  return json({ ok: true, requirePasswordChange: true })
     }
     if (route.endsWith('/toggle') && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const id = path[1]; const st = await db.collection('students').findOne({ id })
       const ns = st.accountStatus === 'Active' ? 'Inactive' : 'Active'
       await db.collection('students').updateOne({ id }, { $set: { accountStatus: ns } }); await audit(db, auth.id, `Set account ${ns}`, 'student', id); return json({ ok: true, accountStatus: ns })
+    }
+
+    // ---------- BULK STUDENT IMPORT ----------
+    if (route === '/students/import' && method === 'POST') {
+      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
+      let rows = Array.isArray(body.rows) ? body.rows : []
+      if (body.fileBase64) {
+        const workbook = XLSX.read(Buffer.from(body.fileBase64, 'base64'), { type: 'buffer' })
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
+      }
+      if (!rows.length) return json({ error: 'No import rows supplied' }, 400)
+      const courses = await db.collection('courses').find({}).toArray()
+      const batches = await db.collection('batches').find({}).toArray()
+      const existing = await db.collection('students').find({}, { projection: { studentId: 1, loginId: 1 } }).toArray()
+      const usedIds = new Set(existing.map(s => s.studentId).filter(Boolean))
+      const usedLogins = new Set(existing.map(s => s.loginId).filter(Boolean))
+      const errors = []; const valid = []
+      rows.forEach((raw, index) => {
+        const row = Object.fromEntries(Object.entries(raw).map(([key, value]) => [String(key).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), String(value ?? '').trim()]))
+        const studentId = row.student_id || row.studentid || row.besant_id
+        const name = row.student_name || row.name
+        const email = row.email_address || row.email
+        const courseName = row.course_name || row.course
+        const batchName = row.batch_name || row.batch
+        const rowErrors = []
+        if (!studentId) rowErrors.push('Student ID is required')
+        if (!name) rowErrors.push('Student Name is required')
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) rowErrors.push('Invalid email')
+        if (studentId && usedIds.has(studentId)) rowErrors.push('Duplicate Student ID')
+        const normalize = value => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+        const courseKey = normalize(courseName)
+        const batchKey = normalize(batchName)
+        const course = courses.find(c => normalize(c.name) === courseKey || normalize(c.code) === courseKey)
+        const batch = batches.find(b => normalize(b.batchId) === batchKey || normalize(b.name) === batchKey)
+        // Course and batch names are kept even when the CSV references a catalog item
+        // that has not been created yet, so students can be imported before catalog setup.
+        if (rowErrors.length) errors.push({ row: index + 2, data: raw, errors: rowErrors })
+        else {
+          let loginId = studentId; let suffix = 1
+          while (usedLogins.has(loginId)) loginId = `${studentId}-${suffix++}`
+          usedIds.add(studentId); usedLogins.add(loginId)
+          valid.push({ studentId, loginId, name, email: email || '', mobile: row.phone_number || row.phone || '', courseId: course?.id || batch?.courseId, batchId: batch?.id, enrollmentDate: row.enrollment_date || todayStr(), status: row.student_status || 'Active', courseName: course?.name || batch?.courseName || courseName || '', batchName: batch?.batchId || batch?.name || batchName || '', trainerId: batch?.trainerId, trainerName: batch?.trainerName })
+        }
+      })
+      if (body.preview) return json({ preview: true, valid, errors, summary: { valid: valid.length, failed: errors.length } })
+      const docs = valid.map(s => ({ ...s, id: uuidv4(), passwordHash: bcrypt.hashSync(body.temporaryPassword || 'Bst@2026', 12), accountStatus: 'Active', requirePasswordChange: true, firstLoginCompleted: false, createdAt: new Date().toISOString() }))
+      if (docs.length) await db.collection('students').insertMany(docs)
+      await audit(db, auth.id, 'Imported students', 'student', 'bulk', `${docs.length} imported, ${errors.length} failed`)
+      return json({ imported: docs.length, errors, skipped: errors.filter(e => e.errors.includes('Duplicate Student ID')).length, summary: { valid: docs.length, failed: errors.length } })
     }
 
     // ---------- SCHEDULES ----------

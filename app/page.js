@@ -93,9 +93,7 @@ function AnimatedBg({ dark }) {
 function Logo({ light }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30">
-        <GraduationCap className="h-6 w-6 text-white" />
-      </div>
+      <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/unnamed-DRXtmuWlVJ5QtXVXGkULz144oNER6g.jpg" alt="Besant Technologies" className="h-10 w-10 rounded-xl object-contain shadow-lg" />
       <div className="leading-tight">
         <div className={`text-lg font-bold tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}>Besant <span className="text-indigo-500">StudentHub</span></div>
         <div className={`text-[10px] font-medium uppercase tracking-widest ${light ? 'text-indigo-200' : 'text-slate-400'}`}>Learn. Track. Grow.</div>
@@ -183,7 +181,7 @@ const submit = async (e) => {
                   <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><Eye className="h-4 w-4" /></button>
                 </div>
               </div>
-              <Button type="submit" onClick={e => submit({ preventDefault: () => e.preventDefault(), currentTarget: e.currentTarget.form })} disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
+              <Button type="submit" disabled={loading} className="h-11 w-full bg-gradient-to-r from-indigo-500 to-violet-600 text-base font-semibold hover:opacity-95">
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
               </Button>
             </form>
@@ -442,10 +440,25 @@ function AdminStudents() {
   }
   const resetPwd = async (s) => {
     const np = prompt('New password for ' + s.name, 'Bst@2026'); if (!np) return
-    try { await api(`/students/${s.id}/reset-password`, 'POST', { newPassword: np }); toast.success('Password reset') } catch (e) { toast.error(e.message) }
+    try { const result = await api(`/students/${s.id || s.studentId}/reset-password`, 'POST', { newPassword: np }); toast.success(result.requirePasswordChange ? 'Password reset. Student must change it on next login.' : 'Password reset') } catch (e) { toast.error(e.message) }
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
+  const downloadTemplate = () => {
+    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Batch Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,PY-FS-01,2026-01-05,Active'
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'besant-student-import-template.csv'; a.click(); URL.revokeObjectURL(a.href)
+  }
+  const importFile = async (event) => {
+    const file = event.target.files?.[0]; if (!file) return
+    try {
+      const buffer = await file.arrayBuffer(); const bytes = new Uint8Array(buffer); let binary = ''
+      bytes.forEach(byte => { binary += String.fromCharCode(byte) })
+      const result = await api('/students/import', 'POST', { fileBase64: btoa(binary) })
+      if ((result.imported || 0) > 0) toast.success(`${result.imported} students imported${result.errors?.length ? `; ${result.errors.length} rows skipped` : ''}`)
+      else toast.error(result.errors?.[0]?.errors?.join(', ') || 'No students were imported')
+      load()
+    } catch (e) { toast.error(e.message) } finally { event.target.value = '' }
+  }
 
   return (
     <div className="space-y-4">
@@ -456,6 +469,8 @@ function AdminStudents() {
         </div>
         <Select value={filterCourse} onValueChange={setFilterCourse}><SelectTrigger className="w-44"><SelectValue placeholder="Course" /></SelectTrigger><SelectContent><SelectItem value="all">All Courses</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{['all', 'Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'All Status' : s}</SelectItem>)}</SelectContent></Select>
+        <Button variant="outline" onClick={downloadTemplate}>Download Template</Button>
+        <label className="inline-flex h-10 cursor-pointer items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Import Excel/CSV<input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={importFile} /></label>
         <Button onClick={() => setShowAdd(true)} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Student</Button>
       </div>
 
@@ -587,6 +602,8 @@ function AdminBatches() {
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
   const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', form); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
+  const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
+  const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
     <div className="space-y-4">
       <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -596,6 +613,7 @@ function AdminBatches() {
         <Field label="Trainer"><Select value={form.trainerId} onValueChange={v => setForm({ ...form, trainerId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{trainers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Start Date"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
         <Field label="End Date"><Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></Field>
+        <Field label="Status"><Select value={form.status || 'Upcoming'} onValueChange={v => setForm({ ...form, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Upcoming', 'Active', 'Completed', 'Cancelled'].map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
         <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Create Batch</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
@@ -605,6 +623,7 @@ function AdminBatches() {
               <div className="flex items-center justify-between"><div className="font-bold text-slate-800">{b.batchId}</div><StatusBadge status={b.status} /></div>
               <div className="mt-1 text-sm text-slate-500">{b.courseName}</div>
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
+              <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
             </CardContent></Card>
           ))}
         </div>
