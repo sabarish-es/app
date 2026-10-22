@@ -109,6 +109,8 @@ function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [lockedRole, setLockedRole] = useState(null)
+  useEffect(() => { const roleParam = new URLSearchParams(window.location.search).get('role'); if (['student', 'trainer'].includes(roleParam)) { setLockedRole(roleParam); setRole(roleParam) } }, [])
 
   const switchRole = (r) => {
     setRole(r)
@@ -160,7 +162,7 @@ const submit = async (e) => {
             <p className="mb-6 text-sm text-slate-500">Sign in to your Besant StudentHub account</p>
 
             <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl bg-slate-100 p-1">
-              {['admin', 'trainer', 'student'].map(r => (
+              {['admin', 'trainer', 'student'].filter(r => !lockedRole || r === lockedRole).map(r => (
                 <button type="button" key={r} onClick={() => switchRole(r)}
                   className={`relative rounded-lg py-2.5 text-sm font-semibold capitalize transition ${role === r ? 'text-white' : 'text-slate-500'}`}>
                   {role === r && <motion.div layoutId="roletab" className="absolute inset-0 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 shadow" />}
@@ -491,7 +493,7 @@ function AdminStudents() {
             <td className="px-4 py-3"><StatusBadge status={s.status || s.accountStatus} /></td>
                     <td className="px-4 py-3"><div className="flex justify-end gap-1">
                       <Button size="icon" variant="ghost" title="View" onClick={() => setDetail(s)}><Eye className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(s)}><KeyRound className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" title="Copy student login link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?role=student`); toast.success('Student login link copied') }}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(s)}><KeyRound className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Toggle account" onClick={() => toggle(s)}><Power className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(s)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
                     </div></td>
@@ -574,6 +576,7 @@ function AdminCourses() {
   useEffect(() => { load() }, [])
   const add = async () => { if (!name) return; try { await api('/courses', 'POST', { name, code, frontend: frontend.split(',').map(x => x.trim()).filter(Boolean), backend: backend.split(',').map(x => x.trim()).filter(Boolean), database: database.split(',').map(x => x.trim()).filter(Boolean), syllabus }); toast.success('Course added'); setName(''); setCode(''); setFrontend(''); setBackend(''); setDatabase(''); setSyllabus(''); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete course?')) return; await api(`/courses/${id}`, 'DELETE'); load() }
+  const clearAll = async () => { if (!list?.length || !confirm('Remove all courses from the course page?')) return; await Promise.all(list.map(c => api(`/courses/${c.id}`, 'DELETE'))); toast.success('Course catalog cleared'); load() }
   return (
     <div className="space-y-4">
       <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -583,7 +586,7 @@ function AdminCourses() {
         <Field label="Backend technologies"><Input value={backend} onChange={e => setBackend(e.target.value)} placeholder="Python, Django" /></Field>
         <Field label="Database technologies"><Input value={database} onChange={e => setDatabase(e.target.value)} placeholder="MySQL, MongoDB" /></Field>
         <Field label="Syllabus details"><Input value={syllabus} onChange={e => setSyllabus(e.target.value)} placeholder="Modules and outcomes" /></Field>
-        <div className="flex items-end"><Button onClick={add} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Course</Button></div>
+        <div className="flex items-end gap-2"><Button onClick={add} className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Course</Button><Button variant="outline" onClick={clearAll} className="text-rose-600">Clear All</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -605,7 +608,7 @@ function AdminBatches() {
   const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 30 })
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
-  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
@@ -665,7 +668,7 @@ function AdminTrainers() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(t => (
           <Card key={t.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6">
             <div className="flex items-center gap-3"><Avatar className="h-10 w-10"><AvatarFallback className="bg-violet-100 text-violet-700">{initials(t.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{t.name}</div><div className="text-xs text-slate-400">{t.skills}</div><div className="text-xs font-mono text-indigo-500">{t.loginId}</div></div></div>
-            <div className="flex gap-1"><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(t)}><KeyRound className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
+            <div className="flex gap-1"><Button size="icon" variant="ghost" title="Copy trainer login link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?role=trainer`); toast.success('Trainer login link copied') }}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(t)}><KeyRound className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
           </CardContent></Card>
         ))}</div>
       )}
@@ -1122,7 +1125,7 @@ function StudentDashboard({ user, go }) {
         <div className="relative">
           <div className="text-sm text-indigo-100">{greet()},</div>
           <div className="text-2xl font-bold">{st.name} 👋</div>
-          <div className="mt-1 text-sm text-indigo-100">{st.courseName} · {st.batchName}</div>
+          <div className="mt-1 text-sm text-indigo-100">{st.courseName} · {st.batchName}</div><div className="mt-1 text-xs text-indigo-200">Batch status: {st.batchStatus || st.status || 'Active'} · {st.batchStartDate || '--'} to {st.batchEndDate || '--'}</div>
           <div className="mt-4 flex flex-wrap gap-3">
             <div className="rounded-xl bg-white/15 px-4 py-2 backdrop-blur"><div className="text-lg font-bold">{data.todayAttended}/{data.todayTotal}</div><div className="text-xs text-indigo-100">Today's Classes</div></div>
             <div className="rounded-xl bg-white/15 px-4 py-2 backdrop-blur"><div className="text-lg font-bold">{data.overallPct}%</div><div className="text-xs text-indigo-100">Attendance</div></div>
@@ -1541,6 +1544,7 @@ function TrainerDashboard({ user }) {
           ))}</div>
         )}
       </div>
+      <Card className="rounded-2xl border-slate-200"><CardHeader><CardTitle className="text-base">Batch monitoring</CardTitle></CardHeader><CardContent className="space-y-2">{data.batches?.length ? data.batches.map(b => <div key={b.id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3"><div><div className="font-medium text-slate-800">{b.batchId}</div><div className="text-xs text-slate-500">{b.courseName} · {b.startDate || '--'} to {b.endDate || '--'}</div></div><StatusBadge status={b.status} /></div>) : <Empty title="No assigned batches" />}</CardContent></Card>
       <QRDialog qr={qr} onClose={() => setQr(null)} />
     </div>
   )
