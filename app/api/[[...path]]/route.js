@@ -106,7 +106,7 @@ async function ensureDefaults(db) {
   }
   const cCount = await db.collection('courses').countDocuments()
   if (cCount === 0) {
-    const names = ['Python Full Stack', 'Java Full Stack', 'Data Analytics', 'Data Science', 'Business Development', 'Networking', 'Cybersecurity', 'Ethical Hacking', 'Web Development', 'Software Testing']
+    const names = ['Python Full Stack', 'Java Full Stack', 'Data Analytics', 'Data Science', 'Power BI & Excel', 'Data Science & AI/ML', 'Zen AI', 'Frontend Development', 'Backend Development', 'Database Administration']
     await db.collection('courses').insertMany(names.map((n, i) => ({
       id: uuidv4(), name: n, code: n.split(' ').map(w => w[0]).join('').toUpperCase(), description: `${n} training program`, active: true, createdAt: new Date().toISOString(),
     })))
@@ -569,6 +569,8 @@ async function handleRoute(request, { params }) {
       const token = uuidv4().replace(/-/g, '').slice(0, 12).toUpperCase()
       const sess = { id: uuidv4(), scheduleId: sched.id, token, courseName: sched.courseName, batchId: sched.batchId, batchName: sched.batchName, classType: sched.classType, date: sched.date, startTime: sched.startTime, endTime: sched.endTime, trainerName: sched.trainerName, validFrom: validFrom.toISOString(), validTo: validTo.toISOString(), active: true, createdAt: new Date().toISOString() }
       await db.collection('sessions').insertOne(sess)
+      const roster = await db.collection('students').find({ batchId: sched.batchId }).toArray()
+      if (roster.length) await db.collection('attendance').insertMany(roster.map(st => ({ id: uuidv4(), sessionId: sess.id, scheduleId: sched.id, studentId: st.id, studentName: st.name, studentCode: st.studentId, courseName: sched.courseName, batchId: sched.batchId, batchName: sched.batchName, classType: sched.classType, trainerName: sched.trainerName, date: sched.date, checkInTime: null, checkOutTime: null, sessionDuration: null, status: 'Absent', locationVerified: false, createdAt: new Date().toISOString() })))
       await db.collection('schedules').updateOne({ id: sched.id }, { $set: { status: 'Live' } })
       await audit(db, auth.id, 'Generated attendance QR', 'session', sess.id, `${sched.classType} ${sched.batchName}`)
       return json(clean(sess))
@@ -592,7 +594,7 @@ async function handleRoute(request, { params }) {
       if (sess.batchId !== st.batchId) return json({ error: 'WRONG_BATCH', message: 'You are not assigned to this class.' }, 403)
       // already checked in for this schedule
       const dup = await db.collection('attendance').findOne({ scheduleId: sess.scheduleId, studentId: st.id, status: { $ne: 'Rejected' } })
-      if (dup) return json({ error: 'ALREADY', message: 'Attendance Already Recorded' }, 409)
+      if (dup?.status === 'Present' || dup?.status === 'Late') return json({ error: 'ALREADY', message: 'Attendance Already Recorded' }, 409)
       // overlapping open session
       await autoCheckout(db)
       const sched = await db.collection('schedules').findOne({ id: sess.scheduleId })
@@ -619,15 +621,10 @@ async function handleRoute(request, { params }) {
       const start = dt(sched.date, sched.startTime)
       const grace = new Date(start.getTime() + (settings.graceMinutes || 15) * 60000)
       const status = now > grace ? 'Late' : 'Present'
-      const rec = {
-        id: uuidv4(), sessionId: sess.id, scheduleId: sess.scheduleId, studentId: st.id, studentName: st.name,
-        studentCode: st.studentId, courseName: sess.courseName, batchId: sess.batchId, batchName: sess.batchName,
-        classType: sess.classType, trainerName: sess.trainerName, date: sess.date,
-        checkInTime: now.toISOString(), checkInLat: lat != null ? Number(lat) : null, checkInLng: lng != null ? Number(lng) : null,
-        gpsAccuracy: accuracy != null ? Number(accuracy) : null, distance,
-        checkOutTime: null, sessionDuration: null, status, locationVerified, device: device || '', createdAt: new Date().toISOString(),
-      }
-      await db.collection('attendance').insertOne(rec)
+      const attendanceUpdate = { checkInTime: now.toISOString(), checkInLat: lat != null ? Number(lat) : null, checkInLng: lng != null ? Number(lng) : null, gpsAccuracy: accuracy != null ? Number(accuracy) : null, distance, checkOutTime: null, sessionDuration: null, status, locationVerified, device: device || '' }
+      let rec
+      if (dup) { await db.collection('attendance').updateOne({ id: dup.id }, { $set: attendanceUpdate }); rec = { ...dup, ...attendanceUpdate } }
+      else { rec = { id: uuidv4(), sessionId: sess.id, scheduleId: sess.scheduleId, studentId: st.id, studentName: st.name, studentCode: st.studentId, courseName: sess.courseName, batchId: sess.batchId, batchName: sess.batchName, classType: sess.classType, trainerName: sess.trainerName, date: sess.date, ...attendanceUpdate, createdAt: new Date().toISOString() }; await db.collection('attendance').insertOne(rec) }
       return json({ ok: true, record: clean(rec), classType: sess.classType, courseName: sess.courseName, checkInTime: rec.checkInTime, locationVerified, status })
     }
     if (route === '/attendance/check-out' && method === 'POST') {
@@ -939,6 +936,7 @@ async function handleRoute(request, { params }) {
       const allSchedules = await db.collection('schedules').find({ trainerId: auth.id }).toArray()
       const batchIds = [...new Set(allSchedules.map(s => s.batchId))]
       const students = await db.collection('students').find({ batchId: { $in: batchIds } }).toArray()
+      const batches = await db.collection('batches').find({ trainerId: auth.id }).sort({ endDate: -1 }).toArray()
       const myRecs = await db.collection('attendance').find({ trainerName: auth.name }).toArray()
       const todayRecs = myRecs.filter(r => r.date === today)
       return json({
@@ -948,8 +946,9 @@ async function handleRoute(request, { params }) {
         presentToday: todayRecs.filter(r => r.status === 'Present').length,
         lateToday: todayRecs.filter(r => r.status === 'Late').length,
         insideNow: todayRecs.filter(r => !r.checkOutTime && r.status !== 'Rejected').length,
-        students: cleanArr(students),
-      })
+students: cleanArr(students),
+  batches: cleanArr(batches),
+  })
     }
 
     return json({ error: `Route ${route} not found` }, 404)
