@@ -425,6 +425,8 @@ function AdminStudents() {
   const [filterCourse, setFilterCourse] = useState('all'); const [filterStatus, setFilterStatus] = useState('all')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', email: '', mobile: '', courseId: '', enrollmentDate: '', status: 'Active' })
   const [detail, setDetail] = useState(null)
   const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
   const [form, setForm] = useState(empty)
@@ -452,11 +454,12 @@ function AdminStudents() {
     try { const result = await api(`/students/${s.id || s.studentId}/reset-password`, 'POST', { newPassword: np }); toast.success(result.requirePasswordChange ? 'Password reset. Student must change it on next login.' : 'Password reset') } catch (e) { toast.error(e.message) }
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
-  const edit = async (s) => { const name = prompt('Student name', s.name); if (name === null) return; const email = prompt('Email', s.email || ''); if (email === null) return; const mobile = prompt('Mobile', s.mobile || ''); if (mobile === null) return; try { await api(`/students/${s.id}`, 'PUT', { name, email, mobile }); toast.success('Student updated'); load() } catch (e) { toast.error(e.message) } }
+  const edit = (s) => { setEditing(s); setEditForm({ name: s.name || '', email: s.email || '', mobile: s.mobile || '', courseId: s.courseId || '', enrollmentDate: s.enrollmentDate || '', status: s.status || 'Active' }) }
+  const saveEdit = async () => { if (!editForm.name.trim()) return toast.error('Student name is required'); try { await api(`/students/${editing.id}`, 'PUT', editForm); toast.success('Student updated'); setEditing(null); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
   const removeSelected = async () => { const selected = list.filter(s => selectedIds.has(s.id)); if (!selected.length || !confirm(`Delete ${selected.length} students?`)) return; await Promise.all(selected.map(s => api(`/students/${s.id}`, 'DELETE'))); setSelectedIds(new Set()); toast.success('Selected students deleted'); load() }
   const downloadTemplate = () => {
-    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Batch Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,PY-FS-01,2026-01-05,Active'
+    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,2026-01-05,Active'
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'besant-student-import-template.csv'; a.click(); URL.revokeObjectURL(a.href)
   }
   const importFile = async (event) => {
@@ -491,7 +494,7 @@ function AdminStudents() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <tr><th className="px-4 py-3"><Checkbox aria-label="Select all students" checked={list.length > 0 && selectedIds.size === list.length} onCheckedChange={checked => setSelectedIds(checked ? new Set(list.map(s => s.id)) : new Set())} /></th><th className="px-4 py-3">Student</th><th className="px-4 py-3">Login ID</th><th className="px-4 py-3">Course</th><th className="px-4 py-3">Batch</th><th className="px-4 py-3">Account</th><th className="px-4 py-3 text-right">Actions</th></tr>
+                <tr><th className="px-4 py-3"><Checkbox aria-label="Select all students" checked={list.length > 0 && selectedIds.size === list.length} onCheckedChange={checked => setSelectedIds(checked ? new Set(list.map(s => s.id)) : new Set())} /></th><th className="px-4 py-3">Student</th><th className="px-4 py-3">Login ID</th><th className="px-4 py-3">Course</th><th className="px-4 py-3">Account</th><th className="px-4 py-3 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {list.map(s => (
@@ -500,7 +503,6 @@ function AdminStudents() {
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-8 w-8"><AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-medium text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId}</div></div></div></td>
                     <td className="px-4 py-3 font-mono text-xs">{s.loginId}</td>
                     <td className="px-4 py-3 text-slate-600">{s.courseName || '--'}</td>
-<td className="px-4 py-3 text-slate-600">{s.batchName || '--'}<div className="text-xs text-slate-400">{s.batchStatus || ''} · {s.batchStartDate || '--'} to {s.batchEndDate || '--'}</div></td>
             <td className="px-4 py-3"><StatusBadge status={s.status || s.accountStatus} /></td>
                     <td className="px-4 py-3"><div className="flex justify-end gap-1">
                       <Button size="icon" variant="ghost" title="Edit" onClick={() => edit(s)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="View" onClick={() => setDetail(s)}><Eye className="h-4 w-4" /></Button>
@@ -532,6 +534,23 @@ function AdminStudents() {
             <div className="col-span-2 flex items-center gap-2 rounded-xl bg-slate-50 p-3"><Switch checked={form.requirePasswordChange} onCheckedChange={v => setForm({ ...form, requirePasswordChange: v })} /><span className="text-sm text-slate-600">Require password change on first login</span></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button><Button onClick={create} className="bg-gradient-to-r from-indigo-500 to-violet-600">Create Account</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader><DialogTitle>Edit Student</DialogTitle><DialogDescription>Update the student details stored in the database.</DialogDescription></DialogHeader>
+          {editing && <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Student ID"><Input value={editing.studentId || ''} disabled /></Field>
+            <Field label="Login ID"><Input value={editing.loginId || ''} disabled /></Field>
+            <Field label="Full Name *"><Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></Field>
+            <Field label="Email"><Input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} /></Field>
+            <Field label="Mobile"><Input value={editForm.mobile} onChange={e => setEditForm({ ...editForm, mobile: e.target.value })} /></Field>
+            <Field label="Course"><Select value={editForm.courseId || 'none'} onValueChange={v => setEditForm({ ...editForm, courseId: v === 'none' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent><SelectItem value="none">No course</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Enrollment Date"><Input type="date" value={editForm.enrollmentDate} onChange={e => setEditForm({ ...editForm, enrollmentDate: e.target.value })} /></Field>
+            <Field label="Status"><Select value={editForm.status} onValueChange={v => setEditForm({ ...editForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
+          </div>}
+          <DialogFooter><Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button><Button onClick={saveEdit}>Save Changes</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
