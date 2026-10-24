@@ -40,9 +40,14 @@ async function api(path, method = 'GET', body) {
 }
 
 /* ============================ Helpers ============================ */
-const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'
-const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening' }
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '--'
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '--'
+const getGreeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening' }
+function useGreeting() {
+  const [greeting, setGreeting] = useState('Welcome')
+  useEffect(() => { setGreeting(getGreeting()) }, [])
+  return greeting
+}
 const initials = (n) => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
 function useCountUp(target, dur = 1000) {
@@ -748,7 +753,8 @@ function AdminPlacements() {
 /* ---------- Schedules ---------- */
 function AdminSchedules() {
   const [list, setList] = useState(null); const [batches, setBatches] = useState([]); const [types, setTypes] = useState([])
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState('')
+  useEffect(() => { setDate(new Date().toISOString().slice(0, 10)) }, [])
   const [form, setForm] = useState({ batchId: '', classType: '', startTime: '09:00', endTime: '11:00', room: 'Lab 1', maxCapacity: 30 })
   const [qr, setQr] = useState(null)
   const load = useCallback(() => { api(`/schedules?date=${date}`).then(setList) }, [date])
@@ -1117,6 +1123,7 @@ function StudentApp({ user, onLogout }) {
 }
 
 function StudentDashboard({ user, go }) {
+  const greeting = useGreeting()
   const [data, setData] = useState(null)
   useEffect(() => { api('/dashboard/student').then(setData).catch(() => {}) }, [])
   if (!data) return <div className="space-y-4"><Skeleton className="h-40 rounded-3xl" /><Skeleton className="h-64 rounded-3xl" /></div>
@@ -1127,7 +1134,7 @@ function StudentDashboard({ user, go }) {
       <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
         <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative">
-          <div className="text-sm text-indigo-100">{greet()},</div>
+          <div className="text-sm text-indigo-100">{greeting},</div>
           <div className="text-2xl font-bold">{st.name} 👋</div>
           <div className="mt-1 text-sm text-indigo-100">{st.courseName} · {st.batchName}</div><div className="mt-1 text-xs text-indigo-200">Batch status: {st.batchStatus || st.status || 'Active'} · {st.batchStartDate || '--'} to {st.batchEndDate || '--'}</div>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -1522,6 +1529,7 @@ function TrainerLeave() {
 }
 
 function TrainerDashboard({ user }) {
+  const greeting = useGreeting()
   const [data, setData] = useState(null); const [qr, setQr] = useState(null)
   const load = () => api('/dashboard/trainer').then(setData).catch(() => {})
   useEffect(() => { load() }, [])
@@ -1529,7 +1537,7 @@ function TrainerDashboard({ user }) {
   if (!data) return <Skeleton className="h-64 rounded-2xl" />
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white"><div className="text-sm text-indigo-100">{greet()},</div><div className="text-2xl font-bold">{user.name} 👋</div><div className="text-sm text-indigo-100">Welcome to your trainer portal</div></div>
+      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white"><div className="text-sm text-indigo-100">{greeting},</div><div className="text-2xl font-bold">{user.name} 👋</div><div className="text-sm text-indigo-100">Welcome to your trainer portal</div></div>
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard icon={CalendarDays} label="Classes Today" value={data.todaySchedules.length} color="indigo" />
         <StatCard icon={Users} label="My Students" value={data.totalStudents} color="emerald" />
