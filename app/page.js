@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -102,7 +102,7 @@ function Logo({ light }) {
       <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/unnamed-DRXtmuWlVJ5QtXVXGkULz144oNER6g.jpg" alt="Besant Technologies" className="h-10 w-10 rounded-xl object-contain shadow-lg" />
       <div className="leading-tight">
         <div className={`text-lg font-bold tracking-tight ${light ? 'text-white' : 'text-slate-900'}`}>Besant <span className="text-indigo-500">StudentHub</span></div>
-        <div className={`text-[10px] font-medium uppercase tracking-widest ${light ? 'text-indigo-200' : 'text-slate-400'}`}>Learn. Track. Grow.</div>
+        <div className={`text-[10px] font-medium uppercase tracking-widest ${light ? 'text-indigo-200' : 'text-slate-400'}`}>Learn. Succeed. Grow.</div>
       </div>
     </div>
   )
@@ -679,6 +679,7 @@ function AdminTrainers() {
   useEffect(() => { load(); api('/branches').then(setBranches) }, [])
   const add = async () => { if (!form.name) return toast.error('Name required'); try { await api('/trainers', 'POST', form); toast.success('Trainer created with login'); setForm({ name: '', email: '', mobile: '', skills: '', courses: '', loginId: '', password: 'Trainer@2026', branchId: '' }); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete trainer?')) return; await api(`/trainers/${id}`, 'DELETE'); load() }
+  const edit = async (t) => { const name = prompt('Trainer name', t.name || ''); if (name === null) return; const email = prompt('Email', t.email || ''); if (email === null) return; try { await api(`/trainers/${t.id}`, 'PUT', { name, email, mobile: t.mobile || '', branchId: t.branchId || '' }); toast.success('Trainer updated'); load() } catch (e) { toast.error(e.message) } }
   const resetPwd = async (t) => { const np = prompt('New password for ' + t.name, 'Trainer@2026'); if (!np) return; try { await api(`/trainers/${t.id}/reset-password`, 'POST', { newPassword: np }); toast.success('Password reset') } catch (e) { toast.error(e.message) } }
   return (
     <div className="space-y-4">
@@ -696,7 +697,7 @@ function AdminTrainers() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(t => (
           <Card key={t.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6">
             <div className="flex items-center gap-3"><Avatar className="h-10 w-10"><AvatarFallback className="bg-violet-100 text-violet-700">{initials(t.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{t.name}</div><div className="text-xs text-slate-400">{t.skills}</div><div className="text-xs font-mono text-indigo-500">{t.loginId}</div></div></div>
-            <div className="flex gap-1"><Button size="icon" variant="ghost" title="Copy trainer login link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?role=trainer`); toast.success('Trainer login link copied') }}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(t)}><KeyRound className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
+            <div className="flex gap-1"><Button size="icon" variant="ghost" title="Edit trainer" onClick={() => edit(t)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Copy trainer login link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?role=trainer`); toast.success('Trainer login link copied') }}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(t)}><KeyRound className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => del(t.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
           </CardContent></Card>
         ))}</div>
       )}
