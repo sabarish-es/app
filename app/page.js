@@ -8,7 +8,7 @@ import {
   ClipboardList, PlaneTakeoff, Ticket, DoorOpen, Bell, FileBarChart, PartyPopper, ScrollText,
   Settings, LogOut, QrCode, ScanLine, MapPin, CheckCircle2, XCircle, Clock, Loader2, Plus,
   Search, Eye, KeyRound, Power, Menu, Home, CalendarClock, UserRound, ChevronRight, Trash2,
-  ShieldCheck, TrendingUp, Sparkles, Camera, Copy, RefreshCw, Timer, X, Building2, Briefcase, Printer
+  ShieldCheck, TrendingUp, Sparkles, Camera, Copy, RefreshCw, Timer, X, Building2, Briefcase, Printer, Pencil
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -39,9 +40,14 @@ async function api(path, method = 'GET', body) {
 }
 
 /* ============================ Helpers ============================ */
-const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--'
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '--'
-const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening' }
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '--'
+const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '--'
+const getGreeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening' }
+function useGreeting() {
+  const [greeting, setGreeting] = useState('Welcome')
+  useEffect(() => { setGreeting(getGreeting()) }, [])
+  return greeting
+}
 const initials = (n) => (n || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
 function useCountUp(target, dur = 1000) {
@@ -417,9 +423,10 @@ function AdminStudents() {
   const [q, setQ] = useState('')
   const [courses, setCourses] = useState([]); const [batches, setBatches] = useState([]); const [trainers, setTrainers] = useState([])
   const [filterCourse, setFilterCourse] = useState('all'); const [filterStatus, setFilterStatus] = useState('all')
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [showAdd, setShowAdd] = useState(false)
   const [detail, setDetail] = useState(null)
-  const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', batchId: '', trainerId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
+  const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
   const [form, setForm] = useState(empty)
 
   const load = useCallback(() => {
@@ -445,7 +452,9 @@ function AdminStudents() {
     try { const result = await api(`/students/${s.id || s.studentId}/reset-password`, 'POST', { newPassword: np }); toast.success(result.requirePasswordChange ? 'Password reset. Student must change it on next login.' : 'Password reset') } catch (e) { toast.error(e.message) }
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
+  const edit = async (s) => { const name = prompt('Student name', s.name); if (name === null) return; const email = prompt('Email', s.email || ''); if (email === null) return; const mobile = prompt('Mobile', s.mobile || ''); if (mobile === null) return; try { await api(`/students/${s.id}`, 'PUT', { name, email, mobile }); toast.success('Student updated'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
+  const removeSelected = async () => { const selected = list.filter(s => selectedIds.has(s.id)); if (!selected.length || !confirm(`Delete ${selected.length} students?`)) return; await Promise.all(selected.map(s => api(`/students/${s.id}`, 'DELETE'))); setSelectedIds(new Set()); toast.success('Selected students deleted'); load() }
   const downloadTemplate = () => {
     const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Batch Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,PY-FS-01,2026-01-05,Active'
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'besant-student-import-template.csv'; a.click(); URL.revokeObjectURL(a.href)
@@ -473,6 +482,7 @@ function AdminStudents() {
         <Select value={filterStatus} onValueChange={setFilterStatus}><SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent>{['all', 'Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'All Status' : s}</SelectItem>)}</SelectContent></Select>
         <Button variant="outline" onClick={downloadTemplate}>Download Template</Button>
         <label className="inline-flex h-10 cursor-pointer items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Import Excel/CSV<input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={importFile} /></label>
+        {selectedIds.size > 0 && <Button variant="outline" onClick={removeSelected} className="text-rose-600">Delete Selected ({selectedIds.size})</Button>}
         <Button onClick={() => setShowAdd(true)} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Student</Button>
       </div>
 
@@ -481,18 +491,19 @@ function AdminStudents() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <tr><th className="px-4 py-3">Student</th><th className="px-4 py-3">Login ID</th><th className="px-4 py-3">Course</th><th className="px-4 py-3">Batch</th><th className="px-4 py-3">Account</th><th className="px-4 py-3 text-right">Actions</th></tr>
+                <tr><th className="px-4 py-3"><Checkbox aria-label="Select all students" checked={list.length > 0 && selectedIds.size === list.length} onCheckedChange={checked => setSelectedIds(checked ? new Set(list.map(s => s.id)) : new Set())} /></th><th className="px-4 py-3">Student</th><th className="px-4 py-3">Login ID</th><th className="px-4 py-3">Course</th><th className="px-4 py-3">Batch</th><th className="px-4 py-3">Account</th><th className="px-4 py-3 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {list.map(s => (
                   <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3"><Checkbox aria-label={`Select ${s.name}`} checked={selectedIds.has(s.id)} onCheckedChange={checked => setSelectedIds(prev => { const next = new Set(prev); checked ? next.add(s.id) : next.delete(s.id); return next })} /></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-8 w-8"><AvatarFallback className="bg-indigo-100 text-xs text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-medium text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId}</div></div></div></td>
                     <td className="px-4 py-3 font-mono text-xs">{s.loginId}</td>
                     <td className="px-4 py-3 text-slate-600">{s.courseName || '--'}</td>
 <td className="px-4 py-3 text-slate-600">{s.batchName || '--'}<div className="text-xs text-slate-400">{s.batchStatus || ''} · {s.batchStartDate || '--'} to {s.batchEndDate || '--'}</div></td>
             <td className="px-4 py-3"><StatusBadge status={s.status || s.accountStatus} /></td>
                     <td className="px-4 py-3"><div className="flex justify-end gap-1">
-                      <Button size="icon" variant="ghost" title="View" onClick={() => setDetail(s)}><Eye className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" title="Edit" onClick={() => edit(s)}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="View" onClick={() => setDetail(s)}><Eye className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Copy student login link" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?role=student`); toast.success('Student login link copied') }}><Copy className="h-4 w-4" /></Button><Button size="icon" variant="ghost" title="Reset password" onClick={() => resetPwd(s)}><KeyRound className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Toggle account" onClick={() => toggle(s)}><Power className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" title="Delete" onClick={() => remove(s)}><Trash2 className="h-4 w-4 text-rose-500" /></Button>
@@ -517,8 +528,6 @@ function AdminStudents() {
             <Field label="Email"><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
             <Field label="Mobile"><Input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></Field>
             <Field label="Course"><Select value={form.courseId} onValueChange={v => setForm({ ...form, courseId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
-            <Field label="Batch"><Select value={form.batchId} onValueChange={v => setForm({ ...form, batchId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{batches.map(b => <SelectItem key={b.id} value={b.id}>{b.batchId}</SelectItem>)}</SelectContent></Select></Field>
-            <Field label="Trainer"><Select value={form.trainerId} onValueChange={v => setForm({ ...form, trainerId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{trainers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
             <Field label="Enrollment Date"><Input type="date" value={form.enrollmentDate} onChange={e => setForm({ ...form, enrollmentDate: e.target.value })} /></Field>
             <div className="col-span-2 flex items-center gap-2 rounded-xl bg-slate-50 p-3"><Switch checked={form.requirePasswordChange} onCheckedChange={v => setForm({ ...form, requirePasswordChange: v })} /><span className="text-sm text-slate-600">Require password change on first login</span></div>
           </div>
@@ -744,7 +753,8 @@ function AdminPlacements() {
 /* ---------- Schedules ---------- */
 function AdminSchedules() {
   const [list, setList] = useState(null); const [batches, setBatches] = useState([]); const [types, setTypes] = useState([])
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState('')
+  useEffect(() => { setDate(new Date().toISOString().slice(0, 10)) }, [])
   const [form, setForm] = useState({ batchId: '', classType: '', startTime: '09:00', endTime: '11:00', room: 'Lab 1', maxCapacity: 30 })
   const [qr, setQr] = useState(null)
   const load = useCallback(() => { api(`/schedules?date=${date}`).then(setList) }, [date])
@@ -1113,6 +1123,7 @@ function StudentApp({ user, onLogout }) {
 }
 
 function StudentDashboard({ user, go }) {
+  const greeting = useGreeting()
   const [data, setData] = useState(null)
   useEffect(() => { api('/dashboard/student').then(setData).catch(() => {}) }, [])
   if (!data) return <div className="space-y-4"><Skeleton className="h-40 rounded-3xl" /><Skeleton className="h-64 rounded-3xl" /></div>
@@ -1123,7 +1134,7 @@ function StudentDashboard({ user, go }) {
       <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
         <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative">
-          <div className="text-sm text-indigo-100">{greet()},</div>
+          <div className="text-sm text-indigo-100">{greeting},</div>
           <div className="text-2xl font-bold">{st.name} 👋</div>
           <div className="mt-1 text-sm text-indigo-100">{st.courseName} · {st.batchName}</div><div className="mt-1 text-xs text-indigo-200">Batch status: {st.batchStatus || st.status || 'Active'} · {st.batchStartDate || '--'} to {st.batchEndDate || '--'}</div>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -1518,6 +1529,7 @@ function TrainerLeave() {
 }
 
 function TrainerDashboard({ user }) {
+  const greeting = useGreeting()
   const [data, setData] = useState(null); const [qr, setQr] = useState(null)
   const load = () => api('/dashboard/trainer').then(setData).catch(() => {})
   useEffect(() => { load() }, [])
@@ -1525,7 +1537,7 @@ function TrainerDashboard({ user }) {
   if (!data) return <Skeleton className="h-64 rounded-2xl" />
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white"><div className="text-sm text-indigo-100">{greet()},</div><div className="text-2xl font-bold">{user.name} 👋</div><div className="text-sm text-indigo-100">Welcome to your trainer portal</div></div>
+      <div className="rounded-3xl bg-gradient-to-br from-indigo-600 to-violet-600 p-6 text-white"><div className="text-sm text-indigo-100">{greeting},</div><div className="text-2xl font-bold">{user.name} 👋</div><div className="text-sm text-indigo-100">Welcome to your trainer portal</div></div>
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard icon={CalendarDays} label="Classes Today" value={data.todaySchedules.length} color="indigo" />
         <StatCard icon={Users} label="My Students" value={data.totalStudents} color="emerald" />
