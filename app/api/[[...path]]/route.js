@@ -385,6 +385,8 @@ async function handleRoute(request, { params }) {
       const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
       await db.collection('batches').insertOne(b)
       if (b.courseId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'course', targetId: b.courseId, title: `New ${b.courseName} batch available`, message: `${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Booking deadline: ${b.bookingDeadline || 'see portal'}.`, read: [], createdAt: new Date().toISOString() })
+      const batchStudents = await db.collection('students').find({ $or: [{ courseId: b.courseId, batchId: null }, { courseId: b.courseId, batchId: { $exists: false } }] }).toArray()
+      if (batchStudents.length) await db.collection('notifications').insertMany(batchStudents.map(student => ({ id: uuidv4(), target: 'student', targetId: student.id, title: `Batch ${b.batchId} is open`, message: `Book your place in ${b.courseName || b.batchId} before ${b.bookingDeadline || 'the deadline'}.`, read: [], createdAt: new Date().toISOString() })))
       if (b.trainerId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'trainer', targetId: b.trainerId, title: `New batch assigned: ${b.batchId}`, message: `You are assigned to ${b.courseName} from ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Attendance and schedule management are available in your trainer portal.`, read: [], createdAt: new Date().toISOString() })
       await audit(db, auth.id, 'Created batch', 'batch', b.id, b.batchId); return json(clean(b))
     }
@@ -488,7 +490,7 @@ async function handleRoute(request, { params }) {
         const name = row.student_name || row.name
         const email = row.email_address || row.email
         const courseName = row.course_name || row.course
-        const batchName = row.batch_name || row.batch
+        const batchName = row.batch_id || row.batch_name || row.batch
         const rowErrors = []
         if (!studentId) rowErrors.push('Student ID is required')
         if (!name) rowErrors.push('Student Name is required')
@@ -761,11 +763,13 @@ async function handleRoute(request, { params }) {
       const list = await db.collection('slots').find({}).sort({ date: 1, startTime: 1 }).toArray()
       return json(cleanArr(list.map(s => ({ ...s, bookedCount: (s.booked || []).length, available: (s.capacity || 0) - (s.booked || []).length, isBooked: isStudent ? (s.booked || []).includes(auth.id) : false }))))
     }
-    if (route === '/slots' && method === 'POST') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const s = { id: uuidv4(), title: body.title, date: body.date, startTime: body.startTime, endTime: body.endTime, capacity: Number(body.capacity) || 1, booked: [], createdAt: new Date().toISOString() }; await db.collection('slots').insertOne(s); return json(clean(s)) }
-    if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST') {
-      if (!isStudent) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const s = await db.collection('slots').findOne({ id }); if (!s) return json({ error: 'Not found' }, 404)
-      if ((s.booked || []).includes(auth.id)) return json({ error: 'Already booked' }, 400)
+    if (route === '/slots' && method === 'POST') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const s = { id: uuidv4(), title: body.title, batchId: body.batchId || null, date: body.date, startTime: body.startTime, endTime: body.endTime, capacity: Number(body.capacity) || 1, booked: [], createdAt: new Date().toISOString() }; await db.collection('slots').insertOne(s); return json(clean(s)) }
+if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST') {
+  if (!isStudent) return json({ error: 'Forbidden' }, 403)
+  const id = path[1]; const s = await db.collection('slots').findOne({ id }); if (!s) return json({ error: 'Not found' }, 404)
+  const student = await db.collection('students').findOne({ id: auth.id })
+  if (s.batchId && student?.batchId !== s.batchId) return json({ error: 'This slot is only available to students booked into its batch' }, 403)
+  if ((s.booked || []).includes(auth.id)) return json({ error: 'Already booked' }, 400)
       if ((s.booked || []).length >= s.capacity) return json({ error: 'Slot full' }, 400)
       await db.collection('slots').updateOne({ id }, { $push: { booked: auth.id } }); return json({ ok: true })
     }
@@ -947,7 +951,7 @@ async function handleRoute(request, { params }) {
         presentToday: todayRecs.filter(r => r.status === 'Present').length,
         lateToday: todayRecs.filter(r => r.status === 'Late').length,
         insideNow: todayRecs.filter(r => !r.checkOutTime && r.status !== 'Rejected').length,
-students: cleanArr(students),
+students: cleanArr(students.map(student => ({ ...student, bookingStatus: student.batchId ? 'Booked' : 'Not booked', bookingNotice: student.batchId ? 'Student is booked into a batch' : 'Student has not booked a batch yet' }))),
   batches: cleanArr(batches),
   })
     }
