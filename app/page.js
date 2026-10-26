@@ -776,11 +776,14 @@ function AdminPlacements() {
 function AdminSchedules() {
   const [list, setList] = useState(null); const [batches, setBatches] = useState([]); const [types, setTypes] = useState([])
   const [date, setDate] = useState('')
+  const [viewMode, setViewMode] = useState('today')
+  const [showCompleted, setShowCompleted] = useState(false)
   useEffect(() => { setDate(new Date().toISOString().slice(0, 10)) }, [])
   const [form, setForm] = useState({ batchId: '', classType: '', startTime: '09:00', endTime: '11:00', room: 'Lab 1', maxCapacity: 30 })
   const [qr, setQr] = useState(null)
-  const load = useCallback(() => { api(`/schedules?date=${date}`).then(setList) }, [date])
+  const load = useCallback(() => { if (!date) return; const query = viewMode === 'today' ? `?date=${date}` : ''; api(`/schedules${query}`).then(setList) }, [date, viewMode])
   useEffect(() => { load() }, [load])
+  const visibleList = (list || []).filter(s => { if (showCompleted) return true; if (s.date !== date) return true; return new Date(`${s.date}T${s.endTime}:00`) > new Date() })
   useEffect(() => { api('/batches').then(setBatches); api('/class-types').then(setTypes) }, [])
   const add = async () => { if (!form.batchId || !form.classType) return toast.error('Batch and Class Type required'); try { await api('/schedules', 'POST', { ...form, date }); toast.success('Schedule created'); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete schedule?')) return; await api(`/schedules/${id}`, 'DELETE'); load() }
@@ -788,15 +791,17 @@ function AdminSchedules() {
   return (
     <div className="space-y-4">
       <Card className="rounded-2xl"><CardContent className="grid items-end gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-6">
-        <Field label="Date"><Input type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
+        <Field label="View"><Select value={viewMode} onValueChange={setViewMode}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today&apos;s classes</SelectItem><SelectItem value="all">All scheduled classes</SelectItem></SelectContent></Select></Field>
+        <Field label="Date"><Input type="date" value={date} onChange={e => { setDate(e.target.value); setViewMode('today') }} /></Field>
+        <label className="flex items-center gap-2 pb-2 text-sm text-slate-600"><Checkbox checked={showCompleted} onCheckedChange={setShowCompleted} /> Show completed</label>
         <Field label="Batch"><Select value={form.batchId} onValueChange={v => setForm({ ...form, batchId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{batches.map(b => <SelectItem key={b.id} value={b.id}>{b.batchId}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Class Type"><Select value={form.classType} onValueChange={v => setForm({ ...form, classType: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{types.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Start"><Input type="time" value={form.startTime} onChange={e => setForm({ ...form, startTime: e.target.value })} /></Field>
         <Field label="End"><Input type="time" value={form.endTime} onChange={e => setForm({ ...form, endTime: e.target.value })} /></Field>
         <Button onClick={add} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Plus className="mr-1 h-4 w-4" /> Add Class</Button>
       </CardContent></Card>
-      {!list ? <Skeleton className="h-40 rounded-2xl" /> : list.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub={`for ${fmtDate(date)}`} /> : (
-        <div className="space-y-2">{list.map(s => (
+      {!list ? <Skeleton className="h-40 rounded-2xl" /> : visibleList.length === 0 ? <Empty icon={CalendarDays} title={viewMode === 'today' ? 'No upcoming classes today' : 'No classes found'} sub={showCompleted ? `for ${fmtDate(date)}` : 'Completed classes are hidden. Enable “Show completed” to view them.'} /> : (
+        <div className="space-y-2">{visibleList.map(s => (
           <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex flex-wrap items-center gap-4 pt-6">
             <div className="grid h-12 w-12 place-items-center rounded-xl bg-indigo-100 text-indigo-600"><Clock className="h-5 w-5" /></div>
             <div className="min-w-[120px]"><div className="font-bold text-slate-800">{s.startTime} - {s.endTime}</div><div className="text-xs text-slate-400">{s.durationMin} min</div></div>

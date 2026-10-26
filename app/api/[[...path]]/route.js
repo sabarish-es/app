@@ -104,18 +104,13 @@ async function ensureDefaults(db) {
       mustChangePassword: false, lastLogin: null, createdAt: new Date().toISOString(),
     })
   }
-  const cCount = await db.collection('courses').countDocuments()
-  if (cCount === 0) {
-    const names = ['Python Full Stack', 'Java Full Stack', 'Data Analytics', 'Data Science', 'Power BI & Excel', 'Data Science & AI/ML', 'Zen AI', 'Frontend Development', 'Backend Development', 'Database Administration']
-    await db.collection('courses').insertMany(names.map((n, i) => ({
-      id: uuidv4(), name: n, code: n.split(' ').map(w => w[0]).join('').toUpperCase(), description: `${n} training program`, active: true, createdAt: new Date().toISOString(),
-    })))
-  }
-  const ctCount = await db.collection('classTypes').countDocuments()
-  if (ctCount === 0) {
-    const cts = ['Python', 'SQL', 'Frontend', 'Backend', 'Java', 'Data Analytics', 'Data Science', 'Aptitude', 'Communication', 'Soft Skills', 'Networking', 'Cybersecurity', 'Ethical Hacking', 'Project Session', 'Interview Preparation', 'Placement Training']
-    await db.collection('classTypes').insertMany(cts.map(n => ({ id: uuidv4(), name: n, createdAt: new Date().toISOString() })))
-  }
+  const names = ['Data Analytics with GenAI', 'Data Science and AI', 'Full Stack Development with GenAI', 'Cloud Computing', 'Software Testing', 'UI/UX Design', 'Cybersecurity', 'Others']
+  await db.collection('courses').updateMany({ name: { $nin: names } }, { $set: { active: false } })
+  await db.collection('courses').deleteMany({ name: { $nin: names }, active: false })
+  for (const name of names) await db.collection('courses').updateOne({ name }, { $set: { active: true, description: `${name} training program` }, $setOnInsert: { id: uuidv4(), code: name.split(' ').map(w => w[0]).join('').toUpperCase(), createdAt: new Date().toISOString() } }, { upsert: true })
+
+  const cts = ['Amazon Web Services (AWS)', 'Aptitude', 'Artificial Intelligence', 'CCNA', 'Cybersecurity', 'Data Analytics', 'Data Science', 'Data Science & AI/ML', 'DevOps', 'Django', 'Excel', 'Frontend Development', 'GenAI', 'Java', 'Linux', 'MongoDB & Node.js', 'Power BI', 'Python', 'ReactJS', 'Selenium with Java', 'Spoken English', 'Spring Boot', 'SQL', 'Tableau', 'UI/UX Design', 'Data Structures and Algorithms', 'Business Statistics', 'Manual Testing']
+  for (const name of cts) await db.collection('classTypes').updateOne({ name }, { $setOnInsert: { id: uuidv4(), name, createdAt: new Date().toISOString() } }, { upsert: true })
 }
 
 async function seedDemo(db) {
@@ -151,7 +146,7 @@ async function seedDemo(db) {
     }
   }
   trainers = await db.collection('trainers').find({}).toArray()
-  const courses = await db.collection('courses').find({}).toArray()
+  const courses = await db.collection('courses').find({ active: { $ne: false } }).toArray()
   const pyCourse = courses.find(c => c.name === 'Python Full Stack') || courses[0]
   // Batches
   let batches = await db.collection('batches').find({}).toArray()
@@ -337,7 +332,7 @@ async function handleRoute(request, { params }) {
     }
 
     // ---------- COURSES ----------
-    if (route === '/courses' && method === 'GET') { return json(cleanArr(await db.collection('courses').find({}).sort({ name: 1 }).toArray())) }
+    if (route === '/courses' && method === 'GET') { return json(cleanArr(await db.collection('courses').find({ active: { $ne: false } }).sort({ name: 1 }).toArray())) }
     if (route === '/courses' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const c = { id: uuidv4(), name: body.name, code: body.code || '', description: body.description || '', technologies: { frontend: body.frontend || [], backend: body.backend || [], database: body.database || [] }, syllabus: body.syllabus || '', active: true, createdAt: new Date().toISOString() }
@@ -478,7 +473,7 @@ async function handleRoute(request, { params }) {
         rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' })
       }
       if (!rows.length) return json({ error: 'No import rows supplied' }, 400)
-      const courses = await db.collection('courses').find({}).toArray()
+      const courses = await db.collection('courses').find({ active: { $ne: false } }).toArray()
       const batches = await db.collection('batches').find({}).toArray()
       const existing = await db.collection('students').find({}, { projection: { studentId: 1, loginId: 1 } }).toArray()
       const usedIds = new Set(existing.map(s => s.studentId).filter(Boolean))
@@ -813,7 +808,7 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       // absent estimate: scheduled students - attended (rough)
       const allRecs = await db.collection('attendance').find({}).toArray()
       // course-wise attendance
-      const courses = await db.collection('courses').find({}).toArray()
+      const courses = await db.collection('courses').find({ active: { $ne: false } }).toArray()
       const courseWise = courses.map(c => {
         const rs = allRecs.filter(r => r.courseName === c.name)
         const p = rs.filter(r => r.status === 'Present' || r.status === 'Late').length
