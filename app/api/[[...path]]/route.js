@@ -836,6 +836,7 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       const st = await db.collection('students').findOne({ id: auth.id })
       const today = todayStr()
       const todaySchedules = await db.collection('schedules').find({ batchId: st.batchId, date: today }).sort({ startTime: 1 }).toArray()
+      const scheduledClasses = await db.collection('schedules').find({ batchId: st.batchId, date: { $gte: today } }).sort({ date: 1, startTime: 1 }).limit(30).toArray()
       const todayRecs = await db.collection('attendance').find({ studentId: auth.id, date: today }).toArray()
       const allRecs = await db.collection('attendance').find({ studentId: auth.id }).toArray()
       const present = allRecs.filter(r => r.status === 'Present' || r.status === 'Late').length
@@ -852,6 +853,7 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       return json({
         student: clean(st),
         todaySchedules: cleanArr(todaySchedules),
+        scheduledClasses: cleanArr(scheduledClasses),
         todayAttended: todayRecs.filter(r => r.status !== 'Rejected').length,
         todayTotal: todaySchedules.length,
         overallPct: pct, totalClasses: allRecs.length, present, current: clean(cur), monthly,
