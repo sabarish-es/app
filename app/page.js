@@ -1183,9 +1183,9 @@ function StudentDashboard({ user, go }) {
       )}
 
       <div>
-        <div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-slate-800">Today's Schedule</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
-        {data.todaySchedules.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled today" /> : (
-          <div className="space-y-2">{data.todaySchedules.map((s, i) => {
+        <div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-slate-800">Scheduled Classes</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
+        {(data.scheduledClasses || data.todaySchedules).length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub="Your batch schedule will appear here when the admin publishes classes." /> : (
+          <div className="space-y-2">{(data.scheduledClasses || data.todaySchedules).map((s, i) => {
             const start = new Date(); const [sh, sm] = s.startTime.split(':'); start.setHours(+sh, +sm, 0, 0)
             const end = new Date(); const [eh, em] = s.endTime.split(':'); end.setHours(+eh, +em, 0, 0)
             const isLive = now >= start && now <= end; const done = now > end
@@ -1194,7 +1194,7 @@ function StudentDashboard({ user, go }) {
                 className={`flex items-center gap-4 rounded-2xl border bg-white p-4 ${isLive ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'}`}>
                 <div className="text-center"><div className="text-sm font-bold text-slate-800">{s.startTime}</div><div className="text-xs text-slate-400">{s.endTime}</div></div>
                 <div className="h-10 w-px bg-slate-200" />
-                <div className="flex-1"><div className="font-semibold text-slate-800">{s.classType}</div><div className="text-xs text-slate-400">{s.trainerName} · {s.room}</div></div>
+                <div className="flex-1"><div className="font-semibold text-slate-800">{s.classType}</div><div className="text-xs text-indigo-500">{s.date}</div><div className="text-xs text-slate-400">{s.trainerName} · {s.room}</div></div>
                 {isLive ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" /> Live</span> : done ? <StatusBadge status="Completed" /> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">Upcoming</span>}
               </motion.div>
             )
