@@ -426,9 +426,9 @@ function AdminStudents() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [showAdd, setShowAdd] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [editForm, setEditForm] = useState({ name: '', email: '', mobile: '', courseId: '', enrollmentDate: '', status: 'Active' })
+  const [editForm, setEditForm] = useState({ name: '', email: '', mobile: '', courseId: '', batchId: '', enrollmentDate: '', status: 'Active' })
   const [detail, setDetail] = useState(null)
-  const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
+  const empty = { studentId: '', loginId: '', password: 'Bst@2026', name: '', email: '', mobile: '', courseId: '', batchId: '', enrollmentDate: '', status: 'Active', requirePasswordChange: false }
   const [form, setForm] = useState(empty)
 
   const load = useCallback(() => {
@@ -454,12 +454,12 @@ function AdminStudents() {
     try { const result = await api(`/students/${s.id || s.studentId}/reset-password`, 'POST', { newPassword: np }); toast.success(result.requirePasswordChange ? 'Password reset. Student must change it on next login.' : 'Password reset') } catch (e) { toast.error(e.message) }
   }
   const toggle = async (s) => { try { const r = await api(`/students/${s.id}/toggle`, 'POST', {}); toast.success('Account ' + r.accountStatus); load() } catch (e) { toast.error(e.message) } }
-  const edit = (s) => { setEditing(s); setEditForm({ name: s.name || '', email: s.email || '', mobile: s.mobile || '', courseId: s.courseId || '', enrollmentDate: s.enrollmentDate || '', status: s.status || 'Active' }) }
+  const edit = (s) => { setEditing(s); setEditForm({ name: s.name || '', email: s.email || '', mobile: s.mobile || '', courseId: s.courseId || '', batchId: s.batchId || '', enrollmentDate: s.enrollmentDate || '', status: s.status || 'Active' }) }
   const saveEdit = async () => { if (!editForm.name.trim()) return toast.error('Student name is required'); try { await api(`/students/${editing.id}`, 'PUT', editForm); toast.success('Student updated'); setEditing(null); load() } catch (e) { toast.error(e.message) } }
   const remove = async (s) => { if (!confirm('Delete ' + s.name + '?')) return; try { await api(`/students/${s.id}`, 'DELETE'); toast.success('Deleted'); load() } catch (e) { toast.error(e.message) } }
   const removeSelected = async () => { const selected = list.filter(s => selectedIds.has(s.id)); if (!selected.length || !confirm(`Delete ${selected.length} students?`)) return; await Promise.all(selected.map(s => api(`/students/${s.id}`, 'DELETE'))); setSelectedIds(new Set()); toast.success('Selected students deleted'); load() }
   const downloadTemplate = () => {
-    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,2026-01-05,Active'
+    const csv = 'Student ID,Student Name,Email Address,Phone Number,Course Name,Batch ID,Enrollment Date,Student Status\\nBST-EX-001,Example Student,student@example.com,9000000000,Python Full Stack,PY-FS-01,2026-01-05,Active'
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'besant-student-import-template.csv'; a.click(); URL.revokeObjectURL(a.href)
   }
   const importFile = async (event) => {
@@ -529,7 +529,8 @@ function AdminStudents() {
             <Field label="Temporary Password"><Input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></Field>
             <Field label="Email"><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field>
             <Field label="Mobile"><Input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></Field>
-            <Field label="Course"><Select value={form.courseId} onValueChange={v => setForm({ ...form, courseId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Course"><Select value={form.courseId} onValueChange={v => setForm({ ...form, courseId: v, batchId: '' })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Batch ID"><Select value={form.batchId || 'none'} onValueChange={v => setForm({ ...form, batchId: v === 'none' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger><SelectContent><SelectItem value="none">No batch</SelectItem>{batches.filter(b => !form.courseId || b.courseId === form.courseId).map(b => <SelectItem key={b.id} value={b.id}>{b.batchId}</SelectItem>)}</SelectContent></Select></Field>
             <Field label="Enrollment Date"><Input type="date" value={form.enrollmentDate} onChange={e => setForm({ ...form, enrollmentDate: e.target.value })} /></Field>
             <div className="col-span-2 flex items-center gap-2 rounded-xl bg-slate-50 p-3"><Switch checked={form.requirePasswordChange} onCheckedChange={v => setForm({ ...form, requirePasswordChange: v })} /><span className="text-sm text-slate-600">Require password change on first login</span></div>
           </div>
@@ -546,7 +547,8 @@ function AdminStudents() {
             <Field label="Full Name *"><Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></Field>
             <Field label="Email"><Input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} /></Field>
             <Field label="Mobile"><Input value={editForm.mobile} onChange={e => setEditForm({ ...editForm, mobile: e.target.value })} /></Field>
-            <Field label="Course"><Select value={editForm.courseId || 'none'} onValueChange={v => setEditForm({ ...editForm, courseId: v === 'none' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent><SelectItem value="none">No course</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Course"><Select value={editForm.courseId || 'none'} onValueChange={v => setEditForm({ ...editForm, courseId: v === 'none' ? '' : v, batchId: '' })}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent><SelectItem value="none">No course</SelectItem>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Batch ID"><Select value={editForm.batchId || 'none'} onValueChange={v => setEditForm({ ...editForm, batchId: v === 'none' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select batch" /></SelectTrigger><SelectContent><SelectItem value="none">No batch</SelectItem>{batches.filter(b => !editForm.courseId || b.courseId === editForm.courseId).map(b => <SelectItem key={b.id} value={b.id}>{b.batchId}</SelectItem>)}</SelectContent></Select></Field>
             <Field label="Enrollment Date"><Input type="date" value={editForm.enrollmentDate} onChange={e => setEditForm({ ...editForm, enrollmentDate: e.target.value })} /></Field>
             <Field label="Status"><Select value={editForm.status} onValueChange={v => setEditForm({ ...editForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Active', 'Completed', 'On Hold', 'Dropped', 'Inactive'].map(status => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
           </div>}
@@ -945,9 +947,9 @@ function AdminLeave() {
 }
 
 function AdminSlots() {
-  const [list, setList] = useState(null); const [form, setForm] = useState({ title: '', date: '', startTime: '', endTime: '', capacity: 1 })
-  const load = () => api('/slots').then(setList); useEffect(() => { load() }, [])
-  const add = async () => { if (!form.title) return; await api('/slots', 'POST', form); toast.success('Slot created'); setForm({ title: '', date: '', startTime: '', endTime: '', capacity: 1 }); load() }
+  const [list, setList] = useState(null); const [batches, setBatches] = useState([]); const [form, setForm] = useState({ title: '', batchId: '', date: '', startTime: '', endTime: '', capacity: 1 })
+  const load = () => api('/slots').then(setList); useEffect(() => { load(); api('/batches').then(setBatches) }, [])
+  const add = async () => { if (!form.title) return; await api('/slots', 'POST', form); toast.success('Slot created'); setForm({ title: '', batchId: '', date: '', startTime: '', endTime: '', capacity: 1 }); load() }
   const del = async (id) => { await api(`/slots/${id}`, 'DELETE'); load() }
   return (
     <div className="space-y-4">
@@ -963,7 +965,7 @@ function AdminSlots() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{list.map(s => (
           <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6">
             <div className="flex items-center justify-between"><div className="font-semibold text-slate-800">{s.title}</div><Button size="icon" variant="ghost" onClick={() => del(s.id)}><Trash2 className="h-4 w-4 text-rose-500" /></Button></div>
-            <div className="text-sm text-slate-500">{s.date} · {s.startTime}-{s.endTime}</div>
+            <div className="text-sm text-slate-500">{s.date} · {s.startTime}-{s.endTime}</div><div className="text-xs text-indigo-600">Batch: {s.batchName || s.batchId || 'All batches'}</div>
             <div className="mt-2 text-xs text-slate-400">Booked {s.bookedCount}/{s.capacity} · {s.available} available</div>
           </CardContent></Card>
         ))}</div>
@@ -1413,7 +1415,7 @@ function StudentSlots() {
   if (!list) return <Skeleton className="h-64 rounded-2xl" />
   if (!list.length) return <Empty icon={Ticket} title="No slots available" />
   return <div className="space-y-3">{list.map(s => (
-    <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6"><div><div className="font-semibold text-slate-800">{s.title}</div><div className="text-sm text-slate-500">{s.date} · {s.startTime}-{s.endTime}</div><div className="text-xs text-slate-400">{s.available} available</div></div>{s.isBooked ? <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Booked</Badge> : <Button size="sm" disabled={s.available <= 0} onClick={() => book(s.id)} className="bg-gradient-to-r from-indigo-500 to-violet-600">Book Slot</Button>}</CardContent></Card>
+    <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center justify-between pt-6"><div><div className="font-semibold text-slate-800">{s.title}</div><div className="text-sm text-slate-500">{s.date} · {s.startTime}-{s.endTime}</div><div className="text-xs text-indigo-600">Batch: {s.batchName || s.batchId || 'All batches'}</div><div className="text-xs text-slate-400">{s.available} available · Only students booked into this batch can reserve</div></div>{s.isBooked ? <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Booked</Badge> : <Button size="sm" disabled={s.available <= 0} onClick={() => book(s.id)} className="bg-gradient-to-r from-indigo-500 to-violet-600">Book Slot</Button>}</CardContent></Card>
   ))}</div>
 }
 
@@ -1610,7 +1612,7 @@ function TrainerStudents() {
   if (!data.students.length) return <Empty icon={Users} title="No students in your batches" />
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{data.students.map(s => (
-      <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center gap-3 pt-6"><Avatar className="h-10 w-10"><AvatarFallback className="bg-indigo-100 text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId} · {s.batchName}</div></div></CardContent></Card>
+      <Card key={s.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-center gap-3 pt-6"><Avatar className="h-10 w-10"><AvatarFallback className="bg-indigo-100 text-indigo-700">{initials(s.name)}</AvatarFallback></Avatar><div><div className="font-semibold text-slate-800">{s.name}</div><div className="text-xs text-slate-400">{s.studentId} · {s.batchName || 'No batch booked'}</div><div className={`mt-1 text-xs font-medium ${s.bookingStatus === 'Booked' ? 'text-emerald-600' : 'text-amber-600'}`}>{s.bookingStatus || (s.batchId ? 'Booked' : 'Not booked')}</div></div></CardContent></Card>
     ))}</div>
   )
 }
