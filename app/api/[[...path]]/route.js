@@ -157,7 +157,7 @@ async function seedDemo(db) {
       { batchId: 'DA-01', name: 'Data Analytics Batch 01', course: courses.find(c => c.name === 'Data Analytics'), trainer: trainers[4] },
       { batchId: 'DS-01', name: 'Data Science Batch 01', course: courses.find(c => c.name === 'Data Science'), trainer: trainers[4] },
     ]
-    batches = b.map(x => ({ id: uuidv4(), batchId: x.batchId, name: x.name, courseId: x.course?.id, courseName: x.course?.name, startDate: '2026-01-05', endDate: '2026-07-05', trainerId: x.trainer?.id, trainerName: x.trainer?.name, maxStudents: 30, currentStudents: 0, status: 'Active', createdAt: new Date().toISOString() }))
+    batches = b.map(x => ({ id: uuidv4(), batchId: x.batchId, name: x.name, courseId: x.course?.id, courseName: x.course?.name, startDate: '2026-01-05', endDate: '2026-07-05', trainerId: x.trainer?.id, trainerName: x.trainer?.name, maxStudents: 150, currentStudents: 0, status: 'Active', createdAt: new Date().toISOString() }))
     await db.collection('batches').insertMany(batches)
   }
   const pyBatch = batches.find(b => b.batchId === 'PY-FS-01')
@@ -377,7 +377,7 @@ async function handleRoute(request, { params }) {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const course = body.courseId ? await db.collection('courses').findOne({ id: body.courseId }) : null
       const trainer = body.trainerId ? await db.collection('trainers').findOne({ id: body.trainerId }) : null
-      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Number(body.maxStudents) || 30, currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
+      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Math.min(150, Math.max(1, Number(body.maxStudents) || 150)), currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
       await db.collection('batches').insertOne(b)
       if (b.courseId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'course', targetId: b.courseId, title: `New ${b.courseName} batch available`, message: `${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Booking deadline: ${b.bookingDeadline || 'see portal'}.`, read: [], createdAt: new Date().toISOString() })
       const batchStudents = await db.collection('students').find({ $or: [{ courseId: b.courseId, batchId: null }, { courseId: b.courseId, batchId: { $exists: false } }] }).toArray()

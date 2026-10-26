@@ -635,10 +635,10 @@ function AdminCourses() {
 /* ---------- Batches ---------- */
 function AdminBatches() {
   const [list, setList] = useState(null); const [courses, setCourses] = useState([]); const [trainers, setTrainers] = useState([])
-  const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 30 })
+  const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 })
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
-  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 30 }); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 }); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
