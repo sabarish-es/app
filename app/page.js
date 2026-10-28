@@ -1158,7 +1158,7 @@ function StudentDashboard({ user, go }) {
   if (!data) return <div className="space-y-4"><Skeleton className="h-40 rounded-3xl" /><Skeleton className="h-64 rounded-3xl" /></div>
   const st = data.student
   const now = new Date()
-  const studentSchedules = (data.scheduledClasses || data.todaySchedules || []).filter(s => (!selectedBatch || s.batchId === selectedBatch) && (!selectedCourse || s.courseId === selectedCourse))
+  const studentSchedules = (data.scheduledClasses || data.todaySchedules || []).filter(s => (!selectedBatch || s.batchId === selectedBatch || s.batchId === st.batchId || s.batchId === st.batchName) && (!selectedCourse || !s.courseId || s.courseId === selectedCourse))
   return (
     <div className="space-y-5">
       <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
@@ -1192,7 +1192,7 @@ function StudentDashboard({ user, go }) {
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-800">Scheduled Classes</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
-        <div className="mb-3 grid gap-2 sm:grid-cols-2"><Select value={selectedBatch || 'none'} onValueChange={value => setSelectedBatch(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Batch ID" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned batches</SelectItem>{(data.availableBatches || []).map(batch => <SelectItem key={batch.id} value={batch.id}>{batch.batchId}</SelectItem>)}</SelectContent></Select><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned courses</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2"><Select value={selectedBatch || 'none'} onValueChange={value => setSelectedBatch(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Batch ID" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned batches</SelectItem>{(data.availableBatches || []).map(batch => <SelectItem key={batch.id} value={batch.id}>{batch.batchId || batch.id}</SelectItem>)}</SelectContent></Select><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned courses</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="mb-3 text-xs text-slate-500">Batch ID: <span className="font-semibold text-indigo-600">{st.batchName || 'Not assigned'}</span></div>
         {studentSchedules.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub="Your batch schedule will appear here when the admin publishes classes." /> : (
           <div className="space-y-2">{studentSchedules.map((s, i) => {
