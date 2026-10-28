@@ -16,8 +16,8 @@ async function connectToMongo() {
       throw new Error('MongoDB is connected in Vercel, but no MongoDB URI is available to the app. Add MONGODB_URI or MONGO_URL in project variables.')
     }
 
-    const client = new MongoClient(mongoUrl)
-    dbPromise = client.connect().then((connection) => connection.db(dbName))
+  const client = new MongoClient(mongoUrl, { serverSelectionTimeoutMS: 10000, connectTimeoutMS: 10000, maxPoolSize: 10 })
+  dbPromise = client.connect().then((connection) => connection.db(dbName)).catch((error) => { dbPromise = undefined; throw error })
   }
   return dbPromise
 }
