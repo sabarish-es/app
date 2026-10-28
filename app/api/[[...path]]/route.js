@@ -16,8 +16,8 @@ async function connectToMongo() {
       throw new Error('MongoDB is connected in Vercel, but no MongoDB URI is available to the app. Add MONGODB_URI or MONGO_URL in project variables.')
     }
 
-    const client = new MongoClient(mongoUrl)
-    dbPromise = client.connect().then((connection) => connection.db(dbName))
+  const client = new MongoClient(mongoUrl, { serverSelectionTimeoutMS: 10000, connectTimeoutMS: 10000, maxPoolSize: 10 })
+  dbPromise = client.connect().then((connection) => connection.db(dbName)).catch((error) => { dbPromise = undefined; throw error })
   }
   return dbPromise
 }
@@ -219,10 +219,7 @@ async function seedDemo(db) {
     await db.collection('schedules').insertMany(scheds)
   }
   // Notifications
-  const notifCount = await db.collection('notifications').countDocuments()
-  if (notifCount === 0) {
-    await db.collection('notifications').insertOne({ id: uuidv4(), target: 'all', targetId: null, title: 'Welcome to Besant StudentHub', message: 'Your student portal is ready. Scan the class QR to mark attendance.', read: [], createdAt: new Date().toISOString() })
-  }
+
   // Placements
   const placeCount = await db.collection('placements').countDocuments()
   if (placeCount === 0) {
@@ -785,13 +782,17 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       const n = { id: uuidv4(), target: body.target || 'all', targetId: body.targetId || null, title: body.title, message: body.message, read: [], createdAt: new Date().toISOString() }
       await db.collection('notifications').insertOne(n); return json(clean(n))
     }
-    if (route === '/notifications/read' && method === 'POST') {
+    if (route === '/notifications/clear' && method === 'POST') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const result = await db.collection('notifications').deleteMany({}); return json({ ok: true, deleted: result.deletedCount }) }
+  if (route.startsWith('/notifications/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('notifications').deleteOne({ id: path[1] }); return json({ ok: true }) }
+  if (route === '/notifications/read' && method === 'POST') {
       if (!auth) return json({ error: 'Unauthorized' }, 401)
       await db.collection('notifications').updateMany({}, { $addToSet: { read: auth.id } }); return json({ ok: true })
     }
 
     // ---------- AUDIT ----------
     if (route === '/audit' && method === 'GET') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); return json(cleanArr(await db.collection('auditLogs').find({}).sort({ timestamp: -1 }).limit(200).toArray())) }
+  if (route === '/audit/clear' && method === 'POST') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); const result = await db.collection('auditLogs').deleteMany({}); return json({ ok: true, deleted: result.deletedCount }) }
+  if (route.startsWith('/audit/') && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('auditLogs').deleteOne({ id: path[1] }); return json({ ok: true }) }
 
     // ---------- DASHBOARDS ----------
     if (route === '/dashboard/admin' && method === 'GET') {
