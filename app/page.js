@@ -1022,9 +1022,11 @@ function AdminHolidays() {
 }
 
 function AdminNotifications() {
-  const [list, setList] = useState(null); const [batches, setBatches] = useState([])
+  const [list, setList] = useState(null); const [batches, setBatches] = useState([]); const [selectedIds, setSelectedIds] = useState(new Set())
   const [form, setForm] = useState({ target: 'all', targetId: null, title: '', message: '' })
   const load = () => api('/notifications').then(setList); useEffect(() => { load(); api('/batches').then(setBatches) }, [])
+  const removeSelected = async () => { const ids = [...selectedIds]; if (!ids.length || !confirm(`Delete ${ids.length} notifications?`)) return; await Promise.all(ids.map(id => api(`/notifications/${id}`, 'DELETE'))); setSelectedIds(new Set()); toast.success('Notifications deleted'); load() }
+  const clearAll = async () => { if (!list?.length || !confirm('Clear all student and trainer notifications?')) return; await api('/notifications/clear', 'POST'); setSelectedIds(new Set()); toast.success('Notifications cleared'); load() }
   const send = async () => { if (!form.title) return toast.error('Title required'); await api('/notifications', 'POST', form); toast.success('Notification sent'); setForm({ target: 'all', targetId: null, title: '', message: '' }); load() }
   return (
     <div className="space-y-4">
@@ -1036,7 +1038,7 @@ function AdminNotifications() {
         <div><Button onClick={send} className="bg-gradient-to-r from-indigo-500 to-violet-600"><Bell className="mr-1 h-4 w-4" /> Send</Button></div>
       </CardContent></Card>
       {!list ? <Skeleton className="h-40 rounded-2xl" /> : (
-        <div className="space-y-2">{list.map(n => (
+        <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><Checkbox aria-label="Select all notifications" checked={list.length > 0 && selectedIds.size === list.length} onCheckedChange={checked => setSelectedIds(checked ? new Set(list.map(n => n.id)) : new Set())} /><span className="text-sm text-slate-500">Select all</span>{selectedIds.size > 0 && <Button variant="outline" onClick={removeSelected} className="text-rose-600">Delete selected ({selectedIds.size})</Button>}<Button variant="outline" onClick={clearAll} className="text-rose-600">Clear all</Button></div>{list.map(n => (
           <Card key={n.id} className="rounded-2xl border-slate-200"><CardContent className="flex items-start gap-3 pt-6"><div className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-100 text-indigo-600"><Bell className="h-4 w-4" /></div><div className="flex-1"><div className="font-semibold text-slate-800">{n.title}</div><div className="text-sm text-slate-500">{n.message}</div></div><div className="text-xs text-slate-400">{fmtDate(n.createdAt)}</div></CardContent></Card>
         ))}</div>
       )}
@@ -1045,17 +1047,19 @@ function AdminNotifications() {
 }
 
 function AdminAudit() {
-  const [list, setList] = useState(null); useEffect(() => { api('/audit').then(setList) }, [])
+  const [list, setList] = useState(null); const [selectedIds, setSelectedIds] = useState(new Set()); useEffect(() => { api('/audit').then(setList) }, [])
+  const removeSelected = async () => { const ids = [...selectedIds]; if (!ids.length || !confirm(`Delete ${ids.length} audit logs?`)) return; await Promise.all(ids.map(id => api(`/audit/${id}`, 'DELETE'))); setSelectedIds(new Set()); toast.success('Audit logs deleted'); api('/audit').then(setList) }
+  const clearAll = async () => { if (!list?.length || !confirm('Clear all audit logs?')) return; await api('/audit/clear', 'POST'); setSelectedIds(new Set()); toast.success('Audit logs cleared'); api('/audit').then(setList) }
   if (!list) return <Skeleton className="h-64 rounded-2xl" />
   if (!list.length) return <Empty icon={ScrollText} title="No audit logs yet" />
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <div className="space-y-3"><div className="flex flex-wrap items-center gap-2"><Checkbox aria-label="Select all audit logs" checked={list.length > 0 && selectedIds.size === list.length} onCheckedChange={checked => setSelectedIds(checked ? new Set(list.map(a => a.id)) : new Set())} /><span className="text-sm text-slate-500">Select all</span>{selectedIds.size > 0 && <Button variant="outline" onClick={removeSelected} className="text-rose-600">Delete selected ({selectedIds.size})</Button>}<Button variant="outline" onClick={clearAll} className="text-rose-600">Clear all</Button></div><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Action</th><th className="px-4 py-3">Entity</th><th className="px-4 py-3">Details</th><th className="px-4 py-3">Time</th></tr></thead>
         <tbody className="divide-y divide-slate-100">{list.map(a => (
-          <tr key={a.id}><td className="px-4 py-3 font-medium text-slate-800">{a.action}</td><td className="px-4 py-3 text-slate-500">{a.entity}</td><td className="px-4 py-3 text-slate-500">{a.details}</td><td className="px-4 py-3 text-xs text-slate-400">{new Date(a.timestamp).toLocaleString('en-IN')}</td></tr>
+          <tr key={a.id}><td className="px-4 py-3"><Checkbox aria-label={`Select ${a.action}`} checked={selectedIds.has(a.id)} onCheckedChange={checked => setSelectedIds(prev => { const next = new Set(prev); checked ? next.add(a.id) : next.delete(a.id); return next })} /></td><td className="px-4 py-3 font-medium text-slate-800">{a.action}</td><td className="px-4 py-3 text-slate-500">{a.entity}</td><td className="px-4 py-3 text-slate-500">{a.details}</td><td className="px-4 py-3 text-xs text-slate-400">{new Date(a.timestamp).toLocaleString('en-IN')}</td></tr>
         ))}</tbody>
       </table>
-    </div>
+    </div></div>
   )
 }
 
