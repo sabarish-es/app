@@ -830,8 +830,12 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       await autoCheckout(db)
       const st = await db.collection('students').findOne({ id: auth.id })
       const today = todayStr()
-      const todaySchedules = await db.collection('schedules').find({ batchId: st.batchId, date: today }).sort({ startTime: 1 }).toArray()
-      const scheduledClasses = await db.collection('schedules').find({ batchId: st.batchId, date: { $gte: today } }).sort({ date: 1, startTime: 1 }).limit(30).toArray()
+      const studentBatches = await db.collection('batches').find({ $or: [{ id: st.batchId }, { batchId: st.batchId }] }).toArray()
+      const batchKeys = [...new Set([st.batchId, ...studentBatches.flatMap(batch => [batch.id, batch.batchId]).filter(Boolean)])]
+      const scheduleBatchQuery = { batchId: { $in: batchKeys } }
+      const todaySchedules = await db.collection('schedules').find({ ...scheduleBatchQuery, date: today }).sort({ startTime: 1 }).toArray()
+      const scheduledClasses = await db.collection('schedules').find({ ...scheduleBatchQuery, date: { $gte: today } }).sort({ date: 1, startTime: 1 }).limit(30).toArray()
+  const studentCourses = st.courseId ? await db.collection('courses').find({ id: st.courseId, active: { $ne: false } }).toArray() : []
       const todayRecs = await db.collection('attendance').find({ studentId: auth.id, date: today }).toArray()
       const allRecs = await db.collection('attendance').find({ studentId: auth.id }).toArray()
       const present = allRecs.filter(r => r.status === 'Present' || r.status === 'Late').length
@@ -849,6 +853,8 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
         student: clean(st),
         todaySchedules: cleanArr(todaySchedules),
         scheduledClasses: cleanArr(scheduledClasses),
+        availableBatches: cleanArr(studentBatches),
+        availableCourses: cleanArr(studentCourses),
         todayAttended: todayRecs.filter(r => r.status !== 'Rejected').length,
         todayTotal: todaySchedules.length,
         overallPct: pct, totalClasses: allRecs.length, present, current: clean(cur), monthly,

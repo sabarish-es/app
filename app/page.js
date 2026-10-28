@@ -1152,10 +1152,13 @@ function StudentApp({ user, onLogout }) {
 function StudentDashboard({ user, go }) {
   const greeting = useGreeting()
   const [data, setData] = useState(null)
-  useEffect(() => { api('/dashboard/student').then(setData).catch(() => {}) }, [])
+  const [selectedBatch, setSelectedBatch] = useState('')
+  const [selectedCourse, setSelectedCourse] = useState('')
+  useEffect(() => { api('/dashboard/student').then(result => { setData(result); setSelectedBatch(result.student?.batchId || ''); setSelectedCourse(result.student?.courseId || '') }).catch(() => {}) }, [])
   if (!data) return <div className="space-y-4"><Skeleton className="h-40 rounded-3xl" /><Skeleton className="h-64 rounded-3xl" /></div>
   const st = data.student
   const now = new Date()
+  const studentSchedules = (data.scheduledClasses || data.todaySchedules || []).filter(s => (!selectedBatch || s.batchId === selectedBatch || s.batchId === st.batchId || s.batchId === st.batchName) && (!selectedCourse || !s.courseId || s.courseId === selectedCourse))
   return (
     <div className="space-y-5">
       <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
@@ -1188,9 +1191,11 @@ function StudentDashboard({ user, go }) {
       )}
 
       <div>
-        <div className="mb-2 flex items-center justify-between"><h3 className="font-semibold text-slate-800">Scheduled Classes</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
-        {(data.scheduledClasses || data.todaySchedules).length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub="Your batch schedule will appear here when the admin publishes classes." /> : (
-          <div className="space-y-2">{(data.scheduledClasses || data.todaySchedules).map((s, i) => {
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-800">Scheduled Classes</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2"><Select value={selectedBatch || 'none'} onValueChange={value => setSelectedBatch(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Batch ID" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned batches</SelectItem>{(data.availableBatches || []).map(batch => <SelectItem key={batch.id} value={batch.id}>{batch.batchId || batch.id}</SelectItem>)}</SelectContent></Select><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned courses</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="mb-3 text-xs text-slate-500">Batch ID: <span className="font-semibold text-indigo-600">{st.batchName || 'Not assigned'}</span></div>
+        {studentSchedules.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub="Your batch schedule will appear here when the admin publishes classes." /> : (
+          <div className="space-y-2">{studentSchedules.map((s, i) => {
             const start = new Date(); const [sh, sm] = s.startTime.split(':'); start.setHours(+sh, +sm, 0, 0)
             const end = new Date(); const [eh, em] = s.endTime.split(':'); end.setHours(+eh, +em, 0, 0)
             const isLive = now >= start && now <= end; const done = now > end
@@ -1200,7 +1205,7 @@ function StudentDashboard({ user, go }) {
                 <div className="text-center"><div className="text-sm font-bold text-slate-800">{s.startTime}</div><div className="text-xs text-slate-400">{s.endTime}</div></div>
                 <div className="h-10 w-px bg-slate-200" />
                 <div className="flex-1"><div className="font-semibold text-slate-800">{s.classType}</div><div className="text-xs text-indigo-500">{s.date}</div><div className="text-xs text-slate-400">{s.trainerName} · {s.room}</div></div>
-                {isLive ? <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" /> Live</span> : done ? <StatusBadge status="Completed" /> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">Upcoming</span>}
+                {isLive ? <Button size="sm" onClick={() => go('scan')} className="bg-indigo-600 hover:bg-indigo-700"><QrCode data-icon="inline-start" /> Scan QR</Button> : done ? <StatusBadge status="Completed" /> : <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">Upcoming</span>}
               </motion.div>
             )
           })}</div>
