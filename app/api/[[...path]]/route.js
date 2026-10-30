@@ -831,8 +831,10 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       await autoCheckout(db)
       const st = await db.collection('students').findOne({ id: auth.id })
       const today = todayStr()
-      const studentBatches = await db.collection('batches').find({ $or: [{ id: st.batchId }, { batchId: st.batchId }] }).toArray()
-      const batchKeys = [...new Set([st.batchId, ...studentBatches.flatMap(batch => [batch.id, batch.batchId]).filter(Boolean)])]
+      const studentBatches = await db.collection('batches').find({ courseId: st.courseId, status: { $nin: ['Completed', 'Cancelled'] } }).sort({ startDate: 1, batchId: 1 }).toArray()
+      const assignedBatch = st.batchId ? await db.collection('batches').findOne({ $or: [{ id: st.batchId }, { batchId: st.batchId }] }) : null
+      if (assignedBatch && !studentBatches.some(batch => batch.id === assignedBatch.id)) studentBatches.unshift(assignedBatch)
+      const batchKeys = [...new Set(studentBatches.flatMap(batch => [batch.id, batch.batchId]).filter(Boolean))]
       const scheduleBatchQuery = { batchId: { $in: batchKeys } }
       const todaySchedules = await db.collection('schedules').find({ ...scheduleBatchQuery, date: today }).sort({ startTime: 1 }).toArray()
       const scheduledClasses = await db.collection('schedules').find({ ...scheduleBatchQuery, date: { $gte: today } }).sort({ date: 1, startTime: 1 }).limit(30).toArray()
