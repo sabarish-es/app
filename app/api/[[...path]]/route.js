@@ -591,7 +591,14 @@ async function handleRoute(request, { params }) {
       const st = await db.collection('students').findOne({ id: auth.id })
       const sess = await db.collection('sessions').findOne({ token: (token || '').trim().toUpperCase() })
   if (!sess) return json({ error: 'INVALID', message: 'Invalid Attendance QR' }, 400)
-  if (!st?.batchId || ![st.batchId, st.batchName].includes(sess.batchId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your permanently assigned batch' }, 403)
+  if (!st) return json({ error: 'Student profile not found' }, 404)
+  if (st.batchLocked && ![st.batchId, st.batchName].includes(sess.batchId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your permanently assigned batch' }, 403)
+  if (!st.batchLocked && ![st.batchId, st.batchName].includes(sess.batchId)) {
+    const sessionBatch = await db.collection('batches').findOne({ $or: [{ id: sess.batchId }, { batchId: sess.batchId }] })
+    if (!sessionBatch || (st.courseId && sessionBatch.courseId !== st.courseId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your selected course batch' }, 403)
+    await db.collection('students').updateOne({ id: st.id }, { $set: { batchId: sessionBatch.id, batchName: sessionBatch.batchId, trainerId: sessionBatch.trainerId, trainerName: sessionBatch.trainerName, batchLocked: true, batchAssignedAt: new Date().toISOString() } })
+    st.batchId = sessionBatch.id; st.batchName = sessionBatch.batchId
+  }
   const now = new Date()
       if (!sess.active || now > new Date(sess.validTo)) return json({ error: 'EXPIRED', message: 'Attendance Session Expired' }, 400)
       if (now < new Date(sess.validFrom)) return json({ error: 'NOT_STARTED', message: 'Attendance session has not started yet' }, 400)
@@ -842,7 +849,7 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       const today = todayStr()
       if (st.batchId) {
         const completionBatch = await db.collection('batches').findOne({ id: st.batchId })
-        if (completionBatch?.endDate && new Date(assignedBatch.endDate) < new Date() && completionBatch.status !== 'Completed') {
+        if (completionBatch?.endDate && new Date(completionBatch.endDate) < new Date() && completionBatch.status !== 'Completed') {
           await db.collection('batches').updateOne({ id: completionBatch.id }, { $set: { status: 'Completed' } })
           const existing = await db.collection('notifications').findOne({ target: 'student', targetId: st.id, title: `Batch ${completionBatch.batchId} completed` })
           if (!existing) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'student', targetId: st.id, title: `Batch ${completionBatch.batchId} completed`, message: `Your batch ${completionBatch.batchId} has been completed.`, read: [], createdAt: new Date().toISOString() })
