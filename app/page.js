@@ -639,6 +639,7 @@ function AdminBatches() {
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
   const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 }); load() } catch (e) { toast.error(e.message) } }
+  const edit = async (batch) => { const name = prompt('Batch name', batch.name || ''); if (name === null) return; const deadline = prompt('Booking deadline', batch.bookingDeadline || ''); if (deadline === null) return; try { await api(`/batches/${batch.id}`, 'PUT', { name, bookingDeadline: deadline }); toast.success('Batch updated'); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
   return (
@@ -664,7 +665,7 @@ function AdminBatches() {
               <div className="mt-2 text-xs text-slate-500">{b.startDate || '--'} to {b.endDate || '--'} · Booking by {b.bookingDeadline || '--'}</div>
               <div className="mt-2 text-xs text-slate-500">Slots: {Array.isArray(b.availableSlots) ? b.availableSlots.join(', ') : (b.availableSlots || '--')}</div>
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
-              <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
+              <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="ghost" onClick={() => edit(b)}><Pencil className="mr-1 h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
             </CardContent></Card>
           ))}
         </div>
@@ -1163,6 +1164,7 @@ function StudentDashboard({ user, go }) {
   const st = data.student
   const now = new Date()
   const studentSchedules = (data.scheduledClasses || data.todaySchedules || []).filter(s => (!selectedBatch || s.batchId === selectedBatch || s.batchId === st.batchId || s.batchId === st.batchName) && (!selectedCourse || !s.courseId || s.courseId === selectedCourse))
+  const assignBatch = async () => { const entered = selectedBatch.trim(); const batch = (data.availableBatches || []).find(item => item.id === entered || item.batchId?.toLowerCase() === entered.toLowerCase()); if (!batch) return toast.error('Batch ID not found for your course'); try { await api(`/students/${st.id}`, 'PUT', { batchId: batch.id }); setSelectedBatch(batch.id); toast.success(`Batch ${batch.batchId} assigned`); } catch (e) { toast.error(e.message) } }
   return (
     <div className="space-y-5">
       <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl">
@@ -1196,7 +1198,7 @@ function StudentDashboard({ user, go }) {
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-800">Scheduled Classes</h3><button onClick={() => go('scan')} className="text-sm font-medium text-indigo-600">Scan QR →</button></div>
-        <div className="mb-3 grid gap-2 sm:grid-cols-2"><Select value={selectedBatch || 'none'} onValueChange={value => setSelectedBatch(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Batch ID" /></SelectTrigger><SelectContent><SelectItem value="none">Select a batch</SelectItem>{(data.availableBatches || []).map(batch => <SelectItem key={batch.id} value={batch.id}>{batch.batchId || batch.id} · {batch.courseName || ''}</SelectItem>)}</SelectContent></Select><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned courses</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="mb-3 grid gap-2 sm:grid-cols-2"><Input value={(data.availableBatches || []).find(batch => batch.id === selectedBatch)?.batchId || selectedBatch} onChange={e => setSelectedBatch(e.target.value)} onBlur={assignBatch} placeholder="Enter Batch ID" /><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">Select a course</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select><Select value={selectedCourse || 'none'} onValueChange={value => setSelectedCourse(value === 'none' ? '' : value)}><SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger><SelectContent><SelectItem value="none">All assigned courses</SelectItem>{(data.availableCourses || []).map(course => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="mb-3 text-xs text-slate-500">Batch ID: <span className="font-semibold text-indigo-600">{st.batchName || 'Not assigned'}</span></div>
         {studentSchedules.length === 0 ? <Empty icon={CalendarDays} title="No classes scheduled" sub="Your batch schedule will appear here when the admin publishes classes." /> : (
           <div className="space-y-2">{studentSchedules.map((s, i) => {
@@ -1392,8 +1394,9 @@ function StudentAttendance() {
 }
 
 function StudentProfile({ user }) {
-  const [st, setSt] = useState(null); const [tab, setTab] = useState('profile')
-  useEffect(() => { api('/dashboard/student').then(d => setSt(d.student)) }, [])
+  const [st, setSt] = useState(null); const [editing, setEditing] = useState(false); const [form, setForm] = useState({ name: '', email: '', mobile: '', emergencyNumber: '' })
+  useEffect(() => { api('/dashboard/student').then(d => { setSt(d.student); setForm({ name: d.student.name || '', email: d.student.email || '', mobile: d.student.mobile || '', emergencyNumber: d.student.emergencyNumber || '' }) }) }, [])
+  const save = async () => { try { await api(`/students/${st.id}`, 'PUT', form); setSt({ ...st, ...form }); setEditing(false); toast.success('Profile updated') } catch (e) { toast.error(e.message) } }
   if (!st) return <Skeleton className="h-64 rounded-2xl" />
   return (
     <div className="space-y-4">
@@ -1401,11 +1404,11 @@ function StudentProfile({ user }) {
         <Avatar className="h-16 w-16 border-2 border-white/30"><AvatarFallback className="bg-white/20 text-xl">{initials(st.name)}</AvatarFallback></Avatar>
         <div><div className="text-xl font-bold">{st.name}</div><div className="text-sm text-indigo-100">{st.studentId}</div><div className="mt-1 flex gap-2"><Badge className="bg-white/20 hover:bg-white/20">{st.courseName}</Badge><Badge className="bg-white/20 hover:bg-white/20">{st.batchName}</Badge></div></div>
       </CardContent></Card>
-      <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 text-sm">
+      <Card className="rounded-2xl"><CardContent className="pt-6"><div className="mb-4 flex justify-end"><Button variant="outline" onClick={() => setEditing(!editing)}><Pencil className="mr-2 h-4 w-4" /> {editing ? 'Cancel' : 'Edit Profile'}</Button></div>{editing && <div className="mb-5 grid gap-3 sm:grid-cols-2"><Field label="Name"><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field><Field label="Email"><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></Field><Field label="Mobile"><Input value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} /></Field><Field label="Emergency number"><Input value={form.emergencyNumber} onChange={e => setForm({ ...form, emergencyNumber: e.target.value })} /></Field><Button onClick={save}>Save Changes</Button></div>}<div className="grid gap-3 sm:grid-cols-2 text-sm">
         {[['Email', st.email], ['Mobile', st.mobile], ['Trainer', st.trainerName], ['Enrollment', fmtDate(st.enrollmentDate)], ['Status', st.status], ['Emergency', st.emergencyNumber]].map(([k, v]) => (
           <div key={k} className="flex justify-between border-b border-slate-100 py-2"><span className="text-slate-400">{k}</span><span className="font-medium text-slate-700">{v || '--'}</span></div>
-        ))}
-      </CardContent></Card>
+            ))}
+      </div></CardContent></Card>
       <ChangePasswordInline />
     </div>
   )

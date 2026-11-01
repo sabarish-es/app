@@ -433,8 +433,9 @@ async function handleRoute(request, { params }) {
       return json(clean(st))
     }
     if (route.startsWith('/students/') && path.length === 2 && method === 'PUT') {
-      if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const id = path[1]; const { _id, id: _i, passwordHash, password, ...upd } = body
+  if (!isAdmin && !(isStudent && auth.id === path[1])) return json({ error: 'Forbidden' }, 403)
+  const id = path[1]; const { _id, id: _i, passwordHash, password, batchId: _batchId, courseId: _courseId, ...rawUpd } = body
+  const upd = isStudent ? { name: rawUpd.name, email: rawUpd.email, mobile: rawUpd.mobile, emergencyNumber: rawUpd.emergencyNumber } : { ...rawUpd, ...(body.batchId ? { batchId: body.batchId } : {}), ...(body.courseId ? { courseId: body.courseId } : {}) }
       if (upd.courseId) { const c = await db.collection('courses').findOne({ id: upd.courseId }); upd.courseName = c?.name }
       if (upd.batchId) { const b = await db.collection('batches').findOne({ id: upd.batchId }); upd.batchName = b?.batchId }
       await db.collection('students').updateOne({ id }, { $set: upd }); await audit(db, auth.id, 'Updated student', 'student', id); return json({ ok: true })
