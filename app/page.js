@@ -849,7 +849,7 @@ function AdminLive() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-lg font-bold text-slate-800"><span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" /></span> LIVE ATTENDANCE</div>
+        <div><div className="flex items-center gap-2 text-lg font-bold text-slate-800"><span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" /></span> LIVE ATTENDANCE</div><div className="mt-1 text-xs text-slate-500">Select a batch session to monitor only its students and attendance.</div></div>
         {data.activeSessions?.length > 1 && (
           <Select value={selected} onValueChange={setSelected}><SelectTrigger className="w-64"><SelectValue placeholder="Session" /></SelectTrigger><SelectContent>{data.activeSessions.map(s => <SelectItem key={s.id} value={s.scheduleId}>{s.classType} · {s.batchName}</SelectItem>)}</SelectContent></Select>
         )}
@@ -868,12 +868,12 @@ function AdminLive() {
           </Card>
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Student</th><th className="px-4 py-3">Check-in</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">State</th></tr></thead>
+              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Student</th><th className="px-4 py-3">Batch ID</th><th className="px-4 py-3">Check-in</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">State</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
                 <AnimatePresence>
                   {data.rows.map(r => (
                     <motion.tr key={r.studentId} layout initial={false} animate={{ opacity: 1, x: 0 }} className="hover:bg-slate-50">
-                      <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-7 w-7"><AvatarFallback className="bg-slate-100 text-xs">{initials(r.name)}</AvatarFallback></Avatar><span className="font-medium text-slate-800">{r.name}</span></div></td>
+                      <td className="px-4 py-3"><div className="flex items-center gap-2"><Avatar className="h-7 w-7"><AvatarFallback className="bg-slate-100 text-xs">{initials(r.name)}</AvatarFallback></Avatar><span className="font-medium text-slate-800">{r.name}</span></div></td><td className="px-4 py-3 text-slate-500">{data.schedule.batchName || data.schedule.batchId}</td>
                       <td className="px-4 py-3">{fmtTime(r.checkIn)}</td>
                       <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
                       <td className="px-4 py-3">{r.checkIn ? (r.locationVerified ? <span className="inline-flex items-center gap-1 text-emerald-600"><MapPin className="h-3.5 w-3.5" />Verified</span> : <span className="text-amber-600">Unverified</span>) : '--'}</td>
