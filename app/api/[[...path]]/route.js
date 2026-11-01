@@ -437,8 +437,15 @@ async function handleRoute(request, { params }) {
   const id = path[1]; const { _id, id: _i, passwordHash, password, batchId: _batchId, courseId: _courseId, ...rawUpd } = body
   const upd = isStudent ? { name: rawUpd.name, email: rawUpd.email, mobile: rawUpd.mobile, emergencyNumber: rawUpd.emergencyNumber } : { ...rawUpd, ...(body.batchId ? { batchId: body.batchId } : {}), ...(body.courseId ? { courseId: body.courseId } : {}) }
       if (upd.courseId) { const c = await db.collection('courses').findOne({ id: upd.courseId }); upd.courseName = c?.name }
-      if (upd.batchId) { const b = await db.collection('batches').findOne({ id: upd.batchId }); upd.batchName = b?.batchId }
-      await db.collection('students').updateOne({ id }, { $set: upd }); await audit(db, auth.id, 'Updated student', 'student', id); return json({ ok: true })
+      if (body.batchId) {
+        const student = await db.collection('students').findOne({ id });
+        if (isStudent && student?.batchId && student.batchId !== body.batchId) return json({ error: 'Your batch is permanently assigned and cannot be changed' }, 409)
+        const b = await db.collection('batches').findOne({ $or: [{ id: body.batchId }, { batchId: body.batchId }] });
+        if (!b || (student?.courseId && b.courseId !== student.courseId)) return json({ error: 'Batch ID is not valid for your course' }, 400)
+        upd.batchId = b.id; upd.batchName = b.batchId; upd.courseId = student?.courseId || b.courseId; upd.courseName = student?.courseName || b.courseName; upd.trainerId = b.trainerId; upd.trainerName = b.trainerName; upd.batchAssignedAt = student?.batchAssignedAt || new Date().toISOString()
+        await db.collection('batches').updateOne({ id: b.id }, { $inc: { currentStudents: 1 } })
+      }
+      await db.collection('students').updateOne({ id }, { $set: upd }); await audit(db, auth.id, 'Updated student', 'student', id); return json({ ok: true, batchId: upd.batchId || null, batchName: upd.batchName || null })
     }
     if (route.startsWith('/students/') && path.length === 2 && method === 'DELETE') { if (!isAdmin) return json({ error: 'Forbidden' }, 403); await db.collection('students').deleteOne({ id: path[1] }); await audit(db, auth.id, 'Deleted student', 'student', path[1]); return json({ ok: true }) }
     if (route.endsWith('/reset-password') && method === 'POST') {
@@ -583,8 +590,9 @@ async function handleRoute(request, { params }) {
       const { token, lat, lng, accuracy, device } = body
       const st = await db.collection('students').findOne({ id: auth.id })
       const sess = await db.collection('sessions').findOne({ token: (token || '').trim().toUpperCase() })
-      if (!sess) return json({ error: 'INVALID', message: 'Invalid Attendance QR' }, 400)
-      const now = new Date()
+  if (!sess) return json({ error: 'INVALID', message: 'Invalid Attendance QR' }, 400)
+  if (!st?.batchId || ![st.batchId, st.batchName].includes(sess.batchId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your permanently assigned batch' }, 403)
+  const now = new Date()
       if (!sess.active || now > new Date(sess.validTo)) return json({ error: 'EXPIRED', message: 'Attendance Session Expired' }, 400)
       if (now < new Date(sess.validFrom)) return json({ error: 'NOT_STARTED', message: 'Attendance session has not started yet' }, 400)
       if (sess.batchId !== st.batchId) return json({ error: 'WRONG_BATCH', message: 'You are not assigned to this class.' }, 403)
@@ -832,6 +840,14 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
       await autoCheckout(db)
       const st = await db.collection('students').findOne({ id: auth.id })
       const today = todayStr()
+      if (st.batchId) {
+        const completionBatch = await db.collection('batches').findOne({ id: st.batchId })
+        if (completionBatch?.endDate && new Date(assignedBatch.endDate) < new Date() && completionBatch.status !== 'Completed') {
+          await db.collection('batches').updateOne({ id: completionBatch.id }, { $set: { status: 'Completed' } })
+          const existing = await db.collection('notifications').findOne({ target: 'student', targetId: st.id, title: `Batch ${completionBatch.batchId} completed` })
+          if (!existing) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'student', targetId: st.id, title: `Batch ${completionBatch.batchId} completed`, message: `Your batch ${completionBatch.batchId} has been completed.`, read: [], createdAt: new Date().toISOString() })
+        }
+      }
       const studentBatches = await db.collection('batches').find({ courseId: st.courseId, status: { $nin: ['Completed', 'Cancelled'] } }).sort({ startDate: 1, batchId: 1 }).toArray()
       const assignedBatch = st.batchId ? await db.collection('batches').findOne({ $or: [{ id: st.batchId }, { batchId: st.batchId }] }) : null
       if (assignedBatch && !studentBatches.some(batch => batch.id === assignedBatch.id)) studentBatches.unshift(assignedBatch)
