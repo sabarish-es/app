@@ -372,12 +372,16 @@ async function handleRoute(request, { params }) {
     if (route === '/batches' && method === 'GET') { const now = new Date(); const batches = await db.collection('batches').find({}).sort({ createdAt: -1 }).toArray(); return json(cleanArr(batches.map(b => { if (['Completed', 'Cancelled'].includes(b.status)) return b; const start = b.startDate ? new Date(b.startDate) : null; const end = b.endDate ? new Date(b.endDate) : null; const status = start && now < start ? 'Upcoming' : end && now > end ? 'Completed' : start ? 'Ongoing' : (b.status || 'Upcoming'); return { ...b, status } }))) }
     if (route === '/batches' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
-      const course = body.courseId ? await db.collection('courses').findOne({ id: body.courseId }) : null
+      const existingBatch = await db.collection('batches').findOne({ batchId: body.batchId })
+      if (existingBatch) return json({ error: 'Batch ID already exists. Add courses to the existing batch instead.' }, 409)
+      const courseIds = [...new Set(body.courseIds || (body.courseId ? [body.courseId] : []))]
+      const selectedCourses = await db.collection('courses').find({ id: { $in: courseIds } }).toArray()
+      const course = selectedCourses[0]
       const trainer = body.trainerId ? await db.collection('trainers').findOne({ id: body.trainerId }) : null
-      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: body.courseId, courseName: course?.name, technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Math.min(150, Math.max(1, Number(body.maxStudents) || 150)), currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
+      const b = { id: uuidv4(), batchId: body.batchId, name: body.name, courseId: course?.id, courseIds, courseName: course?.name, courseNames: selectedCourses.map(item => item.name), technologies: body.technologies || course?.technologies || {}, startDate: body.startDate, endDate: body.endDate, bookingDeadline: body.bookingDeadline || null, availableSlots: body.availableSlots || [], trainerId: body.trainerId, trainerName: trainer?.name, maxStudents: Math.min(150, Math.max(1, Number(body.maxStudents) || 150)), currentStudents: 0, status: body.status || 'Upcoming', createdAt: new Date().toISOString() }
       await db.collection('batches').insertOne(b)
-      if (b.courseId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'course', targetId: b.courseId, title: `New ${b.courseName} batch available`, message: `${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Booking deadline: ${b.bookingDeadline || 'see portal'}.`, read: [], createdAt: new Date().toISOString() })
-      const batchStudents = await db.collection('students').find({ $or: [{ courseId: b.courseId, batchId: null }, { courseId: b.courseId, batchId: { $exists: false } }] }).toArray()
+      if (b.courseIds.length) await db.collection('notifications').insertMany(b.courseIds.map(courseId => ({ id: uuidv4(), target: 'course', targetId: courseId, title: `New ${b.batchId} batch available`, message: `${b.courseNames.join(', ')} · ${b.name} runs ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}.`, read: [], createdAt: new Date().toISOString() })))
+      const batchStudents = await db.collection('students').find({ courseId: { $in: b.courseIds }, $or: [{ batchId: null }, { batchId: { $exists: false } }] }).toArray()
       if (batchStudents.length) await db.collection('notifications').insertMany(batchStudents.map(student => ({ id: uuidv4(), target: 'student', targetId: student.id, title: `Batch ${b.batchId} is open`, message: `Book your place in ${b.courseName || b.batchId} before ${b.bookingDeadline || 'the deadline'}.`, read: [], createdAt: new Date().toISOString() })))
       if (b.trainerId) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'trainer', targetId: b.trainerId, title: `New batch assigned: ${b.batchId}`, message: `You are assigned to ${b.courseName} from ${b.startDate || 'soon'} to ${b.endDate || 'TBD'}. Attendance and schedule management are available in your trainer portal.`, read: [], createdAt: new Date().toISOString() })
       await audit(db, auth.id, 'Created batch', 'batch', b.id, b.batchId); return json(clean(b))
@@ -441,7 +445,7 @@ async function handleRoute(request, { params }) {
         const student = await db.collection('students').findOne({ id });
         if (isStudent && student?.batchId && student.batchId !== body.batchId) return json({ error: 'Your batch is permanently assigned and cannot be changed' }, 409)
         const b = await db.collection('batches').findOne({ $or: [{ id: body.batchId }, { batchId: body.batchId }] });
-        if (!b || (student?.courseId && b.courseId !== student.courseId)) return json({ error: 'Batch ID is not valid for your course' }, 400)
+        if (!b || (student?.courseId && b.courseId !== student.courseId && !(b.courseIds || []).includes(student.courseId))) return json({ error: 'Batch ID is not valid for your course' }, 400)
         upd.batchId = b.id; upd.batchName = b.batchId; upd.courseId = student?.courseId || b.courseId; upd.courseName = student?.courseName || b.courseName; upd.trainerId = b.trainerId; upd.trainerName = b.trainerName; upd.batchAssignedAt = student?.batchAssignedAt || new Date().toISOString()
         await db.collection('batches').updateOne({ id: b.id }, { $inc: { currentStudents: 1 } })
       }
@@ -595,7 +599,7 @@ async function handleRoute(request, { params }) {
   if (st.batchLocked && ![st.batchId, st.batchName].includes(sess.batchId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your permanently assigned batch' }, 403)
   if (!st.batchLocked && ![st.batchId, st.batchName].includes(sess.batchId)) {
     const sessionBatch = await db.collection('batches').findOne({ $or: [{ id: sess.batchId }, { batchId: sess.batchId }] })
-    if (!sessionBatch || (st.courseId && sessionBatch.courseId !== st.courseId)) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your selected course batch' }, 403)
+    if (!sessionBatch || (st.courseId && sessionBatch.courseId !== st.courseId && !(sessionBatch.courseIds || []).includes(st.courseId))) return json({ error: 'BATCH_MISMATCH', message: 'This QR is not for your selected course batch' }, 403)
     await db.collection('students').updateOne({ id: st.id }, { $set: { batchId: sessionBatch.id, batchName: sessionBatch.batchId, trainerId: sessionBatch.trainerId, trainerName: sessionBatch.trainerName, batchLocked: true, batchAssignedAt: new Date().toISOString() } })
     st.batchId = sessionBatch.id; st.batchName = sessionBatch.batchId
   }
@@ -855,7 +859,7 @@ if (route.endsWith('/book') && route.startsWith('/slots/') && method === 'POST')
           if (!existing) await db.collection('notifications').insertOne({ id: uuidv4(), target: 'student', targetId: st.id, title: `Batch ${completionBatch.batchId} completed`, message: `Your batch ${completionBatch.batchId} has been completed.`, read: [], createdAt: new Date().toISOString() })
         }
       }
-      const studentBatches = await db.collection('batches').find({ courseId: st.courseId, status: { $nin: ['Completed', 'Cancelled'] } }).sort({ startDate: 1, batchId: 1 }).toArray()
+      const studentBatches = await db.collection('batches').find({ $or: [{ courseId: st.courseId }, { courseIds: st.courseId }], status: { $nin: ['Completed', 'Cancelled'] } }).sort({ startDate: 1, batchId: 1 }).toArray()
       const assignedBatch = st.batchId ? await db.collection('batches').findOne({ $or: [{ id: st.batchId }, { batchId: st.batchId }] }) : null
       if (assignedBatch && !studentBatches.some(batch => batch.id === assignedBatch.id)) studentBatches.unshift(assignedBatch)
       const batchKeys = [...new Set(studentBatches.flatMap(batch => [batch.id, batch.batchId]).filter(Boolean))]
