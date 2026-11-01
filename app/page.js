@@ -635,10 +635,10 @@ function AdminCourses() {
 /* ---------- Batches ---------- */
 function AdminBatches() {
   const [list, setList] = useState(null); const [courses, setCourses] = useState([]); const [trainers, setTrainers] = useState([])
-  const [form, setForm] = useState({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 })
+  const [form, setForm] = useState({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 })
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
-  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseId: '', trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 }); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); if (!form.courseIds.length) return toast.error('Select at least one course'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 }); load() } catch (e) { toast.error(e.message) } }
   const edit = async (batch) => { const name = prompt('Batch name', batch.name || ''); if (name === null) return; const deadline = prompt('Booking deadline', batch.bookingDeadline || ''); if (deadline === null) return; try { await api(`/batches/${batch.id}`, 'PUT', { name, bookingDeadline: deadline }); toast.success('Batch updated'); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
@@ -647,7 +647,7 @@ function AdminBatches() {
       <Card className="rounded-2xl"><CardContent className="grid gap-3 pt-6 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Batch ID"><Input value={form.batchId} onChange={e => setForm({ ...form, batchId: e.target.value })} placeholder="PY-FS-02" /></Field>
         <Field label="Batch Name"><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Course"><Select value={form.courseId} onValueChange={v => setForm({ ...form, courseId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Courses"><div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-3">{courses.map(course => <label key={course.id} className="flex items-center gap-2 text-sm text-slate-700"><Checkbox checked={form.courseIds.includes(course.id)} onCheckedChange={checked => setForm({ ...form, courseIds: checked ? [...form.courseIds, course.id] : form.courseIds.filter(id => id !== course.id) })} />{course.name}</label>)}</div></Field>
         <Field label="Trainer"><Select value={form.trainerId} onValueChange={v => setForm({ ...form, trainerId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{trainers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label="Start Date"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
         <Field label="End Date"><Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></Field>
@@ -661,7 +661,7 @@ function AdminBatches() {
           {list.map(b => (
             <Card key={b.id} className="rounded-2xl border-slate-200"><CardContent className="pt-6">
               <div className="flex items-center justify-between"><div className="font-bold text-slate-800">{b.batchId}</div><StatusBadge status={b.status} /></div>
-              <div className="mt-1 text-sm text-slate-500">{b.courseName} · {b.name || b.batchId}</div>
+              <div className="mt-1 text-sm text-slate-500">{(b.courseNames || [b.courseName]).filter(Boolean).join(' · ')} · {b.name || b.batchId}</div>
               <div className="mt-2 text-xs text-slate-500">{b.startDate || '--'} to {b.endDate || '--'} · Booking by {b.bookingDeadline || '--'}</div>
               <div className="mt-2 text-xs text-slate-500">Slots: {Array.isArray(b.availableSlots) ? b.availableSlots.join(', ') : (b.availableSlots || '--')}</div>
               <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
@@ -785,7 +785,7 @@ function AdminSchedules() {
   const load = useCallback(() => { if (!date) return; const query = viewMode === 'today' ? `?date=${date}` : ''; api(`/schedules${query}`).then(setList) }, [date, viewMode])
   useEffect(() => { load() }, [load])
   const visibleList = (list || []).filter(s => { if (showCompleted) return true; if (s.date !== date) return true; return new Date(`${s.date}T${s.endTime}:00`) > new Date() })
-  useEffect(() => { api('/batches').then(setBatches); api('/class-types').then(setTypes) }, [])
+  useEffect(() => { api('/batches').then(items => setBatches([...new Map(items.map(batch => [batch.batchId, batch])).values()])); api('/class-types').then(setTypes) }, [])
   const add = async () => { if (!form.batchId || !form.classType) return toast.error('Batch and Class Type required'); try { await api('/schedules', 'POST', { ...form, date }); toast.success('Schedule created'); load() } catch (e) { toast.error(e.message) } }
   const del = async (id) => { if (!confirm('Delete schedule?')) return; await api(`/schedules/${id}`, 'DELETE'); load() }
   const genQR = async (s) => { try { const sess = await api('/sessions', 'POST', { scheduleId: s.id }); setQr({ ...sess, schedule: s }); toast.success('QR generated successfully'); load() } catch (e) { toast.error(e.message) } }
