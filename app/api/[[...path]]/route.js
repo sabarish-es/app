@@ -537,6 +537,12 @@ async function handleRoute(request, { params }) {
     if (route === '/schedules' && method === 'POST') {
       if (!isAdmin) return json({ error: 'Forbidden' }, 403)
       const batch = await db.collection('batches').findOne({ id: body.batchId })
+      if (!batch) return json({ error: 'Batch not found' }, 404)
+      const batchCourseIds = batch.courseIds || (batch.courseId ? [batch.courseId] : [])
+      const eligibleAssignmentFilter = { courseId: { $in: batchCourseIds }, batchLocked: { $ne: true }, batchId: { $ne: batch.id } }
+      await db.collection('students').updateMany(eligibleAssignmentFilter, { $set: { batchId: batch.id, batchName: batch.batchId, trainerId: batch.trainerId, trainerName: batch.trainerName, batchAssignedAt: new Date().toISOString() } })
+      const eligibleStudentCount = await db.collection('students').countDocuments({ batchId: batch.id, courseId: { $in: batchCourseIds } })
+      await db.collection('batches').updateOne({ id: batch.id }, { $set: { currentStudents: eligibleStudentCount } })
       const trainer = body.trainerId ? await db.collection('trainers').findOne({ id: body.trainerId }) : (batch ? { id: batch.trainerId, name: batch.trainerName } : null)
       const st = dt(body.date, body.startTime), en = dt(body.date, body.endTime)
       const durationMin = Math.max(0, Math.round((en - st) / 60000))
