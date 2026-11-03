@@ -635,10 +635,10 @@ function AdminCourses() {
 /* ---------- Batches ---------- */
 function AdminBatches() {
   const [list, setList] = useState(null); const [courses, setCourses] = useState([]); const [trainers, setTrainers] = useState([])
-  const [form, setForm] = useState({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 })
+  const [form, setForm] = useState({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: null })
   const load = () => api('/batches').then(setList)
   useEffect(() => { load(); api('/courses').then(setCourses); api('/trainers').then(setTrainers) }, [])
-  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); if (!form.courseIds.length) return toast.error('Select at least one course'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: 150 }); load() } catch (e) { toast.error(e.message) } }
+  const add = async () => { if (!form.batchId) return toast.error('Batch ID required'); if (!form.courseIds.length) return toast.error('Select at least one course'); try { await api('/batches', 'POST', { ...form, availableSlots: String(form.availableSlots || '').split(',').map(x => x.trim()).filter(Boolean) }); toast.success('Batch created'); setForm({ batchId: '', name: '', courseIds: [], trainerId: '', startDate: '', endDate: '', bookingDeadline: '', availableSlots: '', maxStudents: null }); load() } catch (e) { toast.error(e.message) } }
   const edit = async (batch) => { const name = prompt('Batch name', batch.name || ''); if (name === null) return; const deadline = prompt('Booking deadline', batch.bookingDeadline || ''); if (deadline === null) return; try { await api(`/batches/${batch.id}`, 'PUT', { name, bookingDeadline: deadline }); toast.success('Batch updated'); load() } catch (e) { toast.error(e.message) } }
   const complete = async (batch) => { if (!confirm(`Mark ${batch.batchId} as completed?`)) return; try { await api(`/batches/${batch.id}`, 'PUT', { status: 'Completed', completedAt: new Date().toISOString() }); toast.success('Batch marked as completed'); load() } catch (e) { toast.error(e.message) } }
   const remove = async (batch) => { if (!confirm(`Delete ${batch.batchId}? This cannot be undone.`)) return; try { await api(`/batches/${batch.id}`, 'DELETE'); toast.success('Batch deleted'); load() } catch (e) { toast.error(e.message) } }
@@ -664,7 +664,7 @@ function AdminBatches() {
               <div className="mt-1 text-sm text-slate-500">{(b.courseNames || [b.courseName]).filter(Boolean).join(' · ')} · {b.name || b.batchId}</div>
               <div className="mt-2 text-xs text-slate-500">{b.startDate || '--'} to {b.endDate || '--'} · Booking by {b.bookingDeadline || '--'}</div>
               <div className="mt-2 text-xs text-slate-500">Slots: {Array.isArray(b.availableSlots) ? b.availableSlots.join(', ') : (b.availableSlots || '--')}</div>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents} students</span></div>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><span>Trainer: {b.trainerName || '--'}</span><span>{b.currentStudents}/{b.maxStudents == null ? 'Unlimited' : b.maxStudents} students</span></div>
               <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3"><Button size="sm" variant="ghost" onClick={() => edit(b)}><Pencil className="mr-1 h-4 w-4" /> Edit</Button><Button size="sm" variant="outline" onClick={() => complete(b)} disabled={b.status === 'Completed' || b.status === 'Cancelled'}>Mark Completed</Button><Button size="sm" variant="ghost" onClick={() => remove(b)} className="text-rose-600 hover:text-rose-700"><Trash2 className="mr-1 h-4 w-4" /> Delete</Button></div>
             </CardContent></Card>
           ))}
